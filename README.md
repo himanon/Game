@@ -2,6 +2,18 @@
 
 A high-polish, dependency-free HTML5 Canvas Flappy Bird game.
 
+## Screenshots
+
+| Hills | Space | Ocean | Ruins |
+|:---:|:---:|:---:|:---:|
+| ![Hills](docs/screenshots/ready_hills.png) | ![Space](docs/screenshots/ready_space.png) | ![Ocean](docs/screenshots/ready_ocean.png) | ![Ruins](docs/screenshots/ready_ruins.png) |
+
+In-game (image parallax backgrounds, light shafts, atmosphere):
+
+| Hills | Space | Ocean |
+|:---:|:---:|:---:|
+| ![Hills gameplay](docs/screenshots/gameplay_hills.png) | ![Space gameplay](docs/screenshots/gameplay_space.png) | ![Ocean gameplay](docs/screenshots/gameplay_ocean.png) |
+
 ## Run it
 
 The game now uses image assets from the `assets/` folder, so it must be served over HTTP
