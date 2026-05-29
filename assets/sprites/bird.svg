@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="64" viewBox="0 0 256 64">
+<g transform="translate(0,0)"><g>
+    <ellipse cx="32" cy="34" rx="22" ry="19" fill="#ffd23f"/>
+    <ellipse cx="30" cy="30" rx="18" ry="15" fill="#ffe27a"/>
+    <path d="M14 26 q-10 0 2 6 q8 6 6 12 Z" fill="#f0a818"/>
+    <circle cx="40" cy="27" r="6.5" fill="#fff"/><circle cx="42" cy="27" r="3.2" fill="#1a1a1a"/><circle cx="43.2" cy="25.8" r="1.1" fill="#fff"/>
+    <path d="M52 30 l11 4 l-11 5 Z" fill="#ff8c1a"/>
+    <ellipse cx="32" cy="50" rx="14" ry="4" fill="#e09010" opacity=".5"/>
+  </g></g><g transform="translate(64,0)"><g>
+    <ellipse cx="32" cy="34" rx="22" ry="19" fill="#ffd23f"/>
+    <ellipse cx="30" cy="30" rx="18" ry="15" fill="#ffe27a"/>
+    <path d="M14 32 q-10 -6 2 0 q8 6 6 12 Z" fill="#f0a818"/>
+    <circle cx="40" cy="27" r="6.5" fill="#fff"/><circle cx="42" cy="27" r="3.2" fill="#1a1a1a"/><circle cx="43.2" cy="25.8" r="1.1" fill="#fff"/>
+    <path d="M52 30 l11 4 l-11 5 Z" fill="#ff8c1a"/>
+    <ellipse cx="32" cy="50" rx="14" ry="4" fill="#e09010" opacity=".5"/>
+  </g></g><g transform="translate(128,0)"><g>
+    <ellipse cx="32" cy="34" rx="22" ry="19" fill="#ffd23f"/>
+    <ellipse cx="30" cy="30" rx="18" ry="15" fill="#ffe27a"/>
+    <path d="M14 40 q-10 -14 2 -8 q8 6 6 12 Z" fill="#f0a818"/>
+    <circle cx="40" cy="27" r="6.5" fill="#fff"/><circle cx="42" cy="27" r="3.2" fill="#1a1a1a"/><circle cx="43.2" cy="25.8" r="1.1" fill="#fff"/>
+    <path d="M52 30 l11 4 l-11 5 Z" fill="#ff8c1a"/>
+    <ellipse cx="32" cy="50" rx="14" ry="4" fill="#e09010" opacity=".5"/>
+  </g></g><g transform="translate(192,0)"><g>
+    <ellipse cx="32" cy="34" rx="22" ry="19" fill="#ffd23f"/>
+    <ellipse cx="30" cy="30" rx="18" ry="15" fill="#ffe27a"/>
+    <path d="M14 32 q-10 -6 2 0 q8 6 6 12 Z" fill="#f0a818"/>
+    <circle cx="40" cy="27" r="6.5" fill="#fff"/><circle cx="42" cy="27" r="3.2" fill="#1a1a1a"/><circle cx="43.2" cy="25.8" r="1.1" fill="#fff"/>
+    <path d="M52 30 l11 4 l-11 5 Z" fill="#ff8c1a"/>
+    <ellipse cx="32" cy="50" rx="14" ry="4" fill="#e09010" opacity=".5"/>
+  </g></g>
+</svg>
