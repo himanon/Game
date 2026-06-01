@@ -45,13 +45,7 @@ else if(t==='ms'){[0,.05,.1,.15,.2,.25,.3].forEach((dl,i)=>{const{o,g}=this.mk(i
 else if(t==='cd'){const{o,g}=this.mk();o.frequency.setValueAtTime(520,n);g.gain.setValueAtTime(.05,n);g.gain.exponentialRampToValueAtTime(.001,n+.12);g.connect(d);o.start(n);o.stop(n+.14)}
 else if(t==='shend'){const{o,g}=this.mk('triangle');o.frequency.setValueAtTime(620,n);o.frequency.exponentialRampToValueAtTime(180,n+.3);g.gain.setValueAtTime(.06,n);g.gain.exponentialRampToValueAtTime(.001,n+.35);g.connect(d);o.start(n);o.stop(n+.4)}
 else if(t==='tog'){const{o,g}=this.mk();o.frequency.setValueAtTime(900,n);o.frequency.exponentialRampToValueAtTime(1300,n+.06);g.gain.setValueAtTime(.04,n);g.gain.exponentialRampToValueAtTime(.001,n+.1);g.connect(d);o.start(n);o.stop(n+.12)}
-else if(t==='nearmiss'){const b2=this.c.createBuffer(1,this.c.sampleRate*.06,this.c.sampleRate),dd=b2.getChannelData(0);for(let i=0;i<dd.length;i++)dd[i]=(Math.random()*2-1)*(1-i/dd.length);const s2=this.c.createBufferSource(),f2=this.c.createBiquadFilter(),g2=this.c.createGain();s2.buffer=b2;f2.type='bandpass';f2.frequency.value=3500;f2.Q.value=3;g2.gain.setValueAtTime(.05,n);g2.gain.exponentialRampToValueAtTime(.001,n+.06);s2.connect(f2).connect(g2).connect(d);s2.start(n)}
-else if(t==='fanfare'){const notes=[523,659,784,1047];notes.forEach((freq,i)=>{const{o,g}=this.mk('triangle');o.frequency.setValueAtTime(freq,n+i*.08);o.frequency.exponentialRampToValueAtTime(freq*1.5,n+i*.08+.12);g.gain.setValueAtTime(.06,n+i*.08);g.gain.exponentialRampToValueAtTime(.001,n+i*.08+.3);g.connect(d);o.start(n+i*.08);o.stop(n+i*.08+.35)});const{o:oh,g:gh}=this.mk('sine');oh.frequency.setValueAtTime(110,n);oh.frequency.exponentialRampToValueAtTime(220,n+.32+.08*4);gh.gain.setValueAtTime(.04,n);gh.gain.exponentialRampToValueAtTime(.001,n+.5+.08*4);gh.connect(d);oh.start(n);oh.stop(n+.6)}
 }catch(e){}}};
-
-/* ═══ AMBIENT HUM ═══ */
-function startAmbientHum(){if(!AU.on||!AU.c||ambientHumNode)return;try{ambientHumNode=AU.c.createOscillator();ambientHumGain=AU.c.createGain();ambientHumNode.type='sine';ambientHumNode.frequency.setValueAtTime(55,AU.c.currentTime);ambientHumGain.gain.setValueAtTime(0,AU.c.currentTime);ambientHumGain.gain.linearRampToValueAtTime(0.012,AU.c.currentTime+2);ambientHumNode.connect(ambientHumGain);ambientHumGain.connect(AU.c.destination);ambientHumNode.start()}catch(e){}}
-function stopAmbientHum(){if(!ambientHumNode||!AU.c)return;try{ambientHumGain.gain.linearRampToValueAtTime(0,AU.c.currentTime+1);ambientHumNode.stop(AU.c.currentTime+1.1);ambientHumNode=null;ambientHumGain=null}catch(e){ambientHumNode=null}}
 
 /* ═══ CONSTANTS ═══ */
 const GRV=.42,JMP=-7.8,PW=56,BGAP=182,ISPD=1.4,GND=82,BSZ=32,SHKI=7,SHKD=450,WFLP=80,GHST=1800,MGAP=82,PDIST=220;
@@ -62,12 +56,10 @@ function haptic(t){
   if(window.AndroidBridge){try{AndroidBridge.haptic(t==='light'?'light':t==='score'||t==='powerup'||t==='shend'?'medium':'heavy')}catch(e){}}
   else if(navigator.vibrate){
     if(t==='light')navigator.vibrate(18);
-    else if(t==='score')navigator.vibrate(20);
-    else if(t==='milestone')navigator.vibrate([30,15,50,15,80]);
-    else if(t==='nearmiss')navigator.vibrate(15);
+    else if(t==='score')navigator.vibrate(25);
+    else if(t==='milestone')navigator.vibrate([30,15,55]);
     else if(t==='powerup')navigator.vibrate([20,10,20,10,40]);
     else if(t==='shend')navigator.vibrate(35);
-    else if(t==='death')navigator.vibrate([40,20,80,20,120]);
     else navigator.vibrate([50,20,80]);
   }
 }
@@ -78,15 +70,7 @@ let ti=0,theme='hills',seasonCycle=0;
 const SEASONS=['spring','summer','autumn','winter'];
 function getSeason(){const s=seasonCycle%1;if(s<.25)return{name:'spring',t:s/.25,from:'winter',to:'spring'};if(s<.5)return{name:'summer',t:(s-.25)/.25,from:'spring',to:'summer'};if(s<.75)return{name:'autumn',t:(s-.5)/.25,from:'summer',to:'autumn'};return{name:'winter',t:(s-.75)/.25,from:'autumn',to:'winter'}}
 const SP={spring:{g1:[60,220,70],g2:[40,200,50],hF:[55,185,80],hM:[35,210,60],tr:[75,195,45],sk:[110,215,255]},summer:{g1:[45,200,35],g2:[35,175,25],hF:[40,170,55],hM:[25,200,40],tr:[35,160,25],sk:[80,195,255]},autumn:{g1:[185,140,45],g2:[200,115,35],hF:[170,100,40],hM:[190,110,35],tr:[230,95,20],sk:[210,155,110]},winter:{g1:[195,205,220],g2:[185,195,210],hF:[190,198,215],hM:[180,190,210],tr:[155,145,135],sk:[210,220,240]}};
-let _scCache=null,_scKey=-1;
-function sc_(){
-  const k=Math.round(seasonCycle*5000);
-  if(k===_scKey&&_scCache)return _scCache;
-  _scKey=k;
-  const s=getSeason(),f=SP[s.from]||SP[s.name],t=SP[s.to]||SP[s.name],r={};
-  for(const k2 in f)r[k2]=mc(f[k2],t[k2],s.t);
-  _scCache=r;return r;
-}
+function sc_(){const s=getSeason(),f=SP[s.from]||SP[s.name],t=SP[s.to]||SP[s.name],r={};for(const k in f)r[k]=mc(f[k],t[k],s.t);return r}
 
 /* ═══ ENV DATA ═══ */
 let spObj=[],uwObj=[],bubbles=[],ruObj=[],stars=[],wParts=[],bgTrees=[],bgRiv=[];
@@ -103,39 +87,21 @@ function genCityLayers(){
   cityLayers=[];
   for(let layer=0;layer<5;layer++){
     const buildings=[];
-    const sc=[0.4,0.55,0.7,0.85,1.0][layer];
+    const count=8+layer*3;
     let x=0;
     while(x<W*2.5){
       const w=18+Math.random()*45*(1+layer*.2);
       const h=30+Math.random()*120*(1+layer*.3);
-      const style=Math.floor(Math.random()*4);
-      // Pre-compute scaled dims for window placement
-      const bw=w*sc, bh=h*sc;
-      // Window grid: cols/rows based on scaled pixel size
-      const cols=Math.max(1,Math.floor(bw/8));
-      const rows=Math.max(1,Math.floor(bh/14));
-      const winW=Math.max(2,Math.min(4,(bw/cols)*.55));
-      const winH=Math.max(2,3*sc);
-      const nWin=cols*rows;
-      // For stepped (style 3): windows only in upper section (top 85%) and lower main (bottom 85%)
-      // For spire (style 2): windows only in lower rectangular portion
-      const lit=Array.from({length:nWin},()=>Math.random()>.38);
-      const litColor=Array.from({length:nWin},(_,i)=>{
-        const r=((i*137+Math.floor(h))%100)/100;
-        return r>.85?'cool':r>.92?'green':'warm';
+      const style=Math.floor(Math.random()*4); // 0=rect, 1=tapered, 2=art-deco spire, 3=modern
+      buildings.push({x,w,h,style,
+        windows:{cols:Math.floor(w/8),rows:Math.floor(h/12)},
+        lit:Array.from({length:Math.floor(w/8)*Math.floor(h/12)},()=>Math.random()>.35),
+        litColor:Array.from({length:Math.floor(w/8)*Math.floor(h/12)},()=>Math.random()>.8?'cool':Math.random()>.9?'green':'warm'),
+        offset:Math.random()*W
       });
-      // TV/office seed per window (stable, not per-frame random)
-      const tvSeed=Array.from({length:nWin},(_,i)=>((i*137+Math.floor(h*w))%100));
-      buildings.push({x,w,h,style,cols,rows,winW,winH,lit,litColor,tvSeed});
       x+=w+2+Math.random()*6;
     }
-    cityLayers.push({
-      buildings,
-      speed:[0.05,0.12,0.22,0.38,0.6][layer],
-      alpha:[0.12,0.22,0.38,0.58,0.78][layer],
-      scale:sc,
-      depthRGB:['18,20,35','28,25,50','50,40,70','70,55,85','90,70,95'][layer]
-    });
+    cityLayers.push({buildings,speed:[0.05,0.12,0.22,0.38,0.6][layer],alpha:[0.12,0.22,0.38,0.58,0.78][layer],scale:[0.4,0.55,0.7,0.85,1.0][layer],baseOffset:Math.random()*W*2});
   }
 }
 genCityLayers();
@@ -174,47 +140,6 @@ let lastScoreTime=0;
 let tensionLevel=0;      // builds with score, affects sky color
 let bgTrain={x:-200,active:false,timer:0}; // background train
 
-// === AAA NEW STATE ===
-let deathSlowMo=1;          // death slow-motion multiplier
-let deathAngVel=0;          // spinning angular velocity on death
-let deathTotalRot=0;        // accumulated rotation on death
-let scoreDisplayVal=0;      // animated score counter (game over)
-let scoreColorT=0;          // score color flash timer
-let comboCount=0;           // consecutive pipe combo
-let comboBannerT=0;         // combo banner display timer
-let comboBannerText='';     // combo banner text
-let milestoneFlashT=0;      // full-screen radial flash timer
-let milestoneFlashPhase=0;  // 0=bloom 1=fade
-let newBestConfetti=[];     // confetti particles on new best
-let goEntryT=0;             // game over panel slide-in timer
-let goScoreCountT=0;        // score count-up timer
-let goScoreDisplay=0;       // score being counted up
-let medalSpinT=0;           // medal coin flip timer
-let idleWingT=0;            // ready screen wing flap timer
-let airPuffParticles=[];    // air puff on flap
-let cityVerticalOffset=0;   // parallax city vertical drift
-let flapPitchMult=1;        // dynamic pitch multiplier
-let ambientHumNode=null;    // ambient 55Hz hum
-let ambientHumGain=null;
-let ambientHumRamp=0;       // ramp timer
-let reducedMotion=window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-let cbMode=0;               // colorblind mode: 0=normal,1=deuteranopia,2=highcontrast
-try{cbMode=parseInt(localStorage.getItem('cbm')||'0')}catch(e){}
-let particleBudget=60;      // adaptive particle budget
-let frameTimes=[];          // last 5 frame times for budget
-let fireflies=[];           // score 10+ ambient particles
-let embers=[];              // score 25+ ambient particles
-let sparkleMotes=[];        // score 50+ ambient particles
-let neonSigns=[];           // neon signs on buildings
-let pipeEntries=new Map();  // track pipe spawn time for entry animation
-
-// Initialize neon signs
-function initNeonSigns(){
-  neonSigns=[];
-  for(let i=0;i<3;i++) neonSigns.push({x:50+i*120+Math.random()*30,y:H-GND-80-Math.random()*60,hue:0,phase:Math.random()*Math.PI*2});
-}
-initNeonSigns();
-
 // Initialize ambient particles
 for(let i=0;i<12;i++)ambientParticles.push({x:Math.random()*W,y:Math.random()*(H-GND),vx:(Math.random()-.5)*.2,vy:-.05-Math.random()*.1,a:Math.random()*.3,sz:.5+Math.random()*1.2,life:Math.random()});
 // Initialize distant birds
@@ -245,17 +170,14 @@ isG(){return this.gt>0},
 jump(){if(this.dead)return;this.vy=JMP;this.ang=28;this.fr=(this.fr+1)%3;this.ft=0;
   // Squash & stretch on flap
   this.squash=0.7;this.stretch=1.4;
-  spJP();spAirPuff(this.x,this.y);
-  // Dynamic pitch
-  const pitchMult=flapPitchMult;
-  AU.play('jump');AU.play('whoosh');haptic('light')},
-update(dt){const effDt=state==="DEAD"?dt*deathSlowMo:dt;const s=effDt/16.667,br=BSZ/2-4,gy=H-GND-br;
+  spJP();AU.play('jump');AU.play('whoosh');haptic('light')},
+update(dt){const s=dt/16.667,br=BSZ/2-4,gy=H-GND-br;
   // Squash/stretch spring recovery
   this.squash+=(1-this.squash)*.18*s;this.stretch+=(1-this.stretch)*.18*s;
   // Breathing
-  this.breathT+=effDt*.0008;
-  // Wing phase (two-phase beat)
-  this.wingPhase+=effDt*.01;
+  this.breathT+=dt*.0008;
+  // Wing phase
+  this.wingPhase+=dt*.01;
   this.bt-=dt;if(this.bt<=0){this.bl=140;this.bt=2e3+Math.random()*4e3}if(this.bl>0)this.bl-=dt;
   // Emotion based on situation
   if(!this.dead){
@@ -264,22 +186,13 @@ update(dt){const effDt=state==="DEAD"?dt*deathSlowMo:dt;const s=effDt/16.667,br=
     if(state==='PLAYING'&&Math.abs(this.vy)>8)this.emotion='panic';
   }
   if(state==="PLAYING"){if(!shOn){this.vy+=GRV*s;this.vy=Math.min(this.vy,12);this.y+=this.vy*s}else{let ty=H/2,np=null,nd=1e9;for(const p of pipes){if(!p.a)continue;const d=p.x+PW/2-this.x;if(d>-30&&d<nd){nd=d;np=p}}if(np)ty=np.gy+np.gap/2;this.y+=(ty-this.y)*.06*s;this.vy=(ty-this.y)*.15;this.y+=Math.sin(gT*4)*.3}if(this.isG()){if(this.y<br){this.y=br;this.vy=0}if(this.y>gy){this.y=gy;this.vy=0}}const t=cl((this.vy-JMP)/(12-JMP),0,1);this.ang+=(lp(28,-85,t)-this.ang)*Math.min(1,.18*s)}
-  else if(state==="DEAD"){this.vy+=GRV*s;this.vy=Math.min(this.vy,12);this.y+=this.vy*s;if(this.y>gy){this.y=gy;this.vy=0}
-    // Death tumble: increasing angular velocity, ~540 deg of spin
-    if(deathTotalRot<540){deathAngVel+=(deathSlowMo>0.3?1.2:2.5)*s;deathTotalRot+=deathAngVel;this.ang=-(deathTotalRot%360)}
-    else{this.ang+=(-95-this.ang)*Math.min(1,.18*s)}}
+  else if(state==="DEAD"){this.vy+=GRV*s;this.vy=Math.min(this.vy,12);this.y+=this.vy*s;if(this.y>gy){this.y=gy;this.vy=0}this.ang+=(-95-this.ang)*Math.min(1,.18*s)}
   else if(state==="READY"){this.y=H/2-30+Math.sin(gT*2.4)*10;this.ang=Math.sin(gT*2.4)*8}
   if(!this.dead){this.ft+=dt;if(this.ft>=WFLP){this.fr=(this.fr+1)%3;this.ft-=WFLP}}
   if(this.gt>0)this.gt=Math.max(0,this.gt-dt);
   if(shOn&&state==="PLAYING"&&Math.random()>.4)spTR(this.x-12,this.y)
 },
-draw(){
-  // Contact shadow on ground
-  const groundY=H-GND;const shadowDist=groundY-this.y;const shadowScale=Math.max(0.2,1-shadowDist/200);const shadowAlpha=Math.max(0,.15*(1-shadowDist/220));
-  if(shadowAlpha>0&&!this.dead){X.save();X.globalAlpha=shadowAlpha;X.fillStyle='rgba(0,0,0,0.7)';X.beginPath();X.ellipse(this.x,groundY-2,BSZ*0.7*shadowScale,5*shadowScale,0,0,Math.PI*2);X.fill();X.restore()}
-  // Motion blur ghosts on fast fall
-  if(this.vy>6&&state==="PLAYING"&&!reducedMotion){const ghostAlphas=[0.03,0.08,0.15];const offsets=[this.vy*1.8,this.vy*1.1,this.vy*0.5];for(let g=0;g<3;g++){X.save();X.translate(this.x,this.y-offsets[g]);X.rotate(-this.ang*Math.PI/180);X.globalAlpha=ghostAlphas[g];X.scale(this.squash>1?2-this.squash:1/this.squash,this.stretch>1?this.stretch:1/(2-this.stretch));dBird(0,0,this.fr,this.dead,false,'neutral',this.wingPhase,this.breathT);X.restore()}}
-  X.save();X.translate(this.x,this.y);X.rotate(-this.ang*Math.PI/180);
+draw(){X.save();X.translate(this.x,this.y);X.rotate(-this.ang*Math.PI/180);
   if(this.isG()&&Math.floor(this.gt/100)%2===0)X.globalAlpha=.35;
   // Shield bubble
   if(shOn){const pr=BSZ*.95+Math.sin(gT*6)*3;const g=X.createRadialGradient(0,0,BSZ*.3,0,0,pr);g.addColorStop(0,'rgba(0,200,255,.28)');g.addColorStop(.5,'rgba(0,200,255,.12)');g.addColorStop(1,'rgba(0,200,255,0)');X.fillStyle=g;X.beginPath();X.arc(0,0,pr,0,Math.PI*2);X.fill();X.strokeStyle=`rgba(0,200,255,${.45+Math.sin(gT*8)*.2})`;X.lineWidth=2;X.beginPath();X.arc(0,0,pr-2,0,Math.PI*2);X.stroke()}
@@ -336,29 +249,22 @@ function dBird(x,y,fr,dead,blink,emotion,wingPhase,breathT){
   X.fillStyle='rgba(255,255,255,.1)';
   X.beginPath();X.ellipse(x-2,y-3,s/7,s/9,.2,0,Math.PI*2);X.fill();
   
-  // Wing — two-phase beat cycle
-  // upstroke (wingPhase going up) = lighter underside, downstroke = darker topside
-  const wingCycle=Math.sin(wingPhase*2.5);
-  const isUpstroke=wingCycle>0;
-  const wingLightMult=isUpstroke?1.18:.85;
+  // Wing — primary
   const wg=X.createRadialGradient(x-5,y+wY,1,x-5,y+wY,s/2.8);
-  const wR=dead?204:Math.round(255*wingLightMult);const wG=dead?34:Math.round(170*wingLightMult);
-  wg.addColorStop(0,dead?'#cc2222':`rgba(${wR},${wG},30,.95)`);
-  wg.addColorStop(.4,dead?'#991111':`rgba(${Math.round(220*wingLightMult)},${Math.round(130*wingLightMult)},10,.9)`);
+  wg.addColorStop(0,dead?'#cc2222':'rgba(255,180,30,.95)');
+  wg.addColorStop(.4,dead?'#991111':'rgba(235,140,10,.9)');
   wg.addColorStop(1,dead?'rgba(80,20,20,0)':'rgba(200,100,0,0)');
   X.fillStyle=wg;
-  // Wing tip curves differently per phase
-  const wingTipCurve=isUpstroke?-.18:-.38;
-  X.beginPath();X.ellipse(x-6,y+wY,s/2.6,s/4.2,wingTipCurve,0,Math.PI*2);X.fill();
+  X.beginPath();X.ellipse(x-6,y+wY,s/2.6,s/4.2,-.28,0,Math.PI*2);X.fill();
   // Wing — secondary feather tip
   if(!dead){
     const wg2=X.createLinearGradient(x-16,y+wY+3,x-2,y+wY-2);
-    wg2.addColorStop(0,`rgba(${wR},200,50,.7)`);
+    wg2.addColorStop(0,'rgba(255,200,50,.7)');
     wg2.addColorStop(1,'rgba(255,160,0,.3)');
     X.fillStyle=wg2;
-    const wAng=wingCycle*0.35;
+    const wAng=Math.sin(wingPhase*2.5)*0.3;
     X.save();X.translate(x-8,y+wY+2);X.rotate(wAng);
-    X.beginPath();X.ellipse(0,0,s/3.5,s/6,wingTipCurve-.1,0,Math.PI*2);X.fill();
+    X.beginPath();X.ellipse(0,0,s/3.5,s/6,-.4,0,Math.PI*2);X.fill();
     X.restore();
     // Tail feathers
     for(let fi=0;fi<3;fi++){
@@ -368,8 +274,6 @@ function dBird(x,y,fr,dead,blink,emotion,wingPhase,breathT){
       X.beginPath();X.ellipse(0,0,s/5,s/8.5,0,0,Math.PI*2);X.fill();
       X.restore();
     }
-    // Rim lighting — warm orange crescent on right side
-    X.save();X.strokeStyle='rgba(255,160,60,.55)';X.lineWidth=2;X.beginPath();X.arc(x+1,y,s/2-.5,-.55*Math.PI,.55*Math.PI);X.stroke();X.restore();
   }
   
   // Eye white
@@ -421,25 +325,11 @@ function dBird(x,y,fr,dead,blink,emotion,wingPhase,breathT){
 }
 
 /* ═══ PREMIUM PIPES — PBR Metal with 3D depth ═══ */
-function spawnPipe(){const gap=getGap(),minY=90,maxY=H-GND-gap-90,gy_=minY+Math.random()*(maxY-minY);let p=pipes.find(p=>!p.a);if(!p){p={};pipes.push(p)}p.a=true;p.x=W+20;p.gy=gy_;p.gap=gap;p.sc=false;p.fl=1;p.sd=Math.random()*999;p.entryT=300;pipeSPU++;if(pipeSPU>=getPUI()){spPU(p);pipeSPU=0}}
+function spawnPipe(){const gap=getGap(),minY=90,maxY=H-GND-gap-90,gy_=minY+Math.random()*(maxY-minY);let p=pipes.find(p=>!p.a);if(!p){p={};pipes.push(p)}p.a=true;p.x=W+20;p.gy=gy_;p.gap=gap;p.sc=false;p.fl=1;p.sd=Math.random()*999;pipeSPU++;if(pipeSPU>=getPUI()){spPU(p);pipeSPU=0}}
 
 function drawPipe(p){
   if(!p.a)return;
-  // Pipe entry animation: scale 0.85→1.0 over 300ms
-  let pipeScale=1;
-  if(p.entryT===undefined)p.entryT=0;
-  if(p.entryT>0){const tProgress=1-(p.entryT/300);const eased=1-Math.pow(1-tProgress,3)*(1+Math.sin(tProgress*Math.PI)*.08);pipeScale=0.85+eased*.15}
   const px=p.x,gy_=p.gy,gap=p.gap,cH=28,cX=9,tH=gy_,bY=gy_+gap,bH=H-GND-bY;
-  // Pipe cast shadow on ground (trapezoid stretched right)
-  if(bH>0){X.save();X.globalAlpha=0.13;X.fillStyle='rgba(0,0,0,1)';const sx=px+PW,sy=H-GND;const sw2=PW*0.6,sh2=8;X.beginPath();X.moveTo(px,sy);X.lineTo(px+PW,sy);X.lineTo(sx+sw2+18,sy+sh2);X.lineTo(sx+sw2,sy+sh2);X.closePath();X.fill();X.restore()}
-  // Gap aim line
-  const gapCenterY=gy_+gap/2;
-  X.save();X.globalAlpha=0.04;X.strokeStyle='rgba(255,255,255,1)';X.lineWidth=1;X.beginPath();X.moveTo(px-4,gapCenterY);X.lineTo(px+PW+4,gapCenterY);X.stroke();X.restore();
-  // Sky tint overlay on pipe mid
-  const skyCol=getSky();const midY=(gy_+bY+bH)/2;
-  const tR=skyCol.t[0],tG=skyCol.t[1],tB2=skyCol.t[2];
-  // Entry animation scale context
-  if(pipeScale<1){X.save();const cx=px+PW/2;X.translate(cx,H/2);X.scale(pipeScale,1);X.translate(-cx,-H/2)}
   
   // Score flash with colored light
   if(p.fl>0){X.save();X.globalAlpha=p.fl*.22;const fc=theme==='ocean'?'#30ffe0':theme==='space'?'#ff9955':theme==='ruins'?'#ff7744':'#70ff90';X.fillStyle=fc;X.shadowColor=fc;X.shadowBlur=20;X.fillRect(px-6,0,PW+12,tH);X.fillRect(px-6,bY,PW+12,bH);X.restore()}
@@ -461,11 +351,10 @@ function drawPipe(p){
       g.addColorStop(0,'#0c4848');g.addColorStop(.12,'#186868');g.addColorStop(.28,'#228888');
       g.addColorStop(.44,'#1e7878');g.addColorStop(.62,'#186060');g.addColorStop(.8,'#104848');g.addColorStop(1,'#083030')
     }else{
-      // High contrast mode: white pipes
-      if(cbMode===2){g.addColorStop(0,'#cccccc');g.addColorStop(.3,'#ffffff');g.addColorStop(.7,'#eeeeee');g.addColorStop(1,'#aaaaaa')}
-      // Deuteranopia: shift greens to blue
-      else if(cbMode===1){g.addColorStop(0,'#1a3070');g.addColorStop(.08,'#2550a0');g.addColorStop(.22,'#3270c0');g.addColorStop(.38,'#3e88d0');g.addColorStop(.52,'#3270c0');g.addColorStop(.68,'#2860a8');g.addColorStop(.84,'#1e5090');g.addColorStop(1,'#164870')}
-      else{g.addColorStop(0,'#1a7030');g.addColorStop(.08,'#259840');g.addColorStop(.22,'#32c050');g.addColorStop(.38,'#3ed860');g.addColorStop(.52,'#32c050');g.addColorStop(.68,'#28a840');g.addColorStop(.84,'#1e8030');g.addColorStop(1,'#164820')}
+      // Premium bright green — more vivid, less dark
+      g.addColorStop(0,'#1a7030');g.addColorStop(.08,'#259840');g.addColorStop(.22,'#32c050');
+      g.addColorStop(.38,'#3ed860');g.addColorStop(.52,'#32c050');g.addColorStop(.68,'#28a840');
+      g.addColorStop(.84,'#1e8030');g.addColorStop(1,'#164820')
     }
     X.fillStyle=g;
     if(isCap){rr(sx,sy,sww,sh,5);X.fill()}else{X.fillRect(sx,sy,sww,sh)}
@@ -536,21 +425,35 @@ function drawPipe(p){
       X.strokeStyle='rgba(0,0,0,.05)';X.lineWidth=.8;
       for(let i=1;i<4;i++){const ly=sy+sh*(i/4);X.beginPath();X.moveTo(sx,ly);X.lineTo(sx+sww,ly);X.stroke()}
     }
-    // Surface wear details (reduced count for perf)
-    if(sh>30){X.save();const sd_=p.sd;
-      X.globalAlpha=.07;X.fillStyle='rgba(140,100,40,1)';
-      for(let i=0;i<3;i++){
+    // Paint chipping at edges (wear detail)
+    if(sh>30){
+      X.save();const sd_=p.sd;
+      for(let i=0;i<4;i++){
         const cpx=sx+3+(((sd_*7+i*23)|0)%(sww-6));
         const cpy=sy+3+(((sd_*11+i*17)|0)%Math.max(1,sh-6));
-        X.beginPath();X.ellipse(cpx,cpy,2,1,.5,0,Math.PI*2);X.fill();
+        X.globalAlpha=.08;X.fillStyle='rgba(140,100,40,1)'; // rust under paint
+        X.beginPath();X.ellipse(cpx,cpy,2+Math.random(),1+Math.random(),.5+Math.random(),0,Math.PI*2);X.fill();
       }
       X.restore();
     }
-    // Scratches — batch into one path
-    if(sh>25){X.save();X.globalAlpha=.04;X.strokeStyle='rgba(255,255,255,.6)';X.lineWidth=.5;
-      const sd_=p.sd;X.beginPath();
-      for(let i=0;i<Math.min(3,sh/25|0);i++){const yy=sy+6+(((sd_*17+i*23)|0)%Math.max(1,sh-12));X.moveTo(sx+3,yy);X.lineTo(sx+sww-3,yy+((sd_+i)%3-1)*1.5)}
-      X.stroke();X.restore();
+    // Scratches
+    if(sh>25){
+      X.save();X.globalAlpha=.04;X.strokeStyle='rgba(255,255,255,.6)';X.lineWidth=.5;
+      const sd_=p.sd;
+      for(let i=0;i<Math.min(5,sh/20);i++){const yy=sy+6+(((sd_*17+i*23)|0)%Math.max(1,sh-12));X.beginPath();X.moveTo(sx+3,yy);X.lineTo(sx+sww-3,yy+(((sd_+i)|0)%3-1)*1.5);X.stroke()}
+      X.restore();
+    }
+    // Rust bloom patches
+    if(sh>20){
+      X.save();const sd_=p.sd;
+      for(let i=0;i<3;i++){
+        const rx2=sx+4+(((sd_*7+i*31)|0)%(sww-8));
+        const ry2=sy+4+(((sd_*11+i*19)|0)%Math.max(1,sh-8));
+        const rg=X.createRadialGradient(rx2,ry2,0,rx2,ry2,3.5);
+        rg.addColorStop(0,'rgba(140,60,15,.1)');rg.addColorStop(1,'rgba(140,60,15,0)');
+        X.fillStyle=rg;X.beginPath();X.arc(rx2,ry2,3.5,0,Math.PI*2);X.fill();
+      }
+      X.restore();
     }
     // Outer rim outline for definition
     X.strokeStyle='rgba(0,0,0,.15)';X.lineWidth=.5;
@@ -566,19 +469,8 @@ function drawPipe(p){
   // Vine growth on hills theme
   if(theme==='hills'){const sn=getSeason().name;if(sn!=='winter'){X.save();X.globalAlpha=sn==='autumn'?.18:.12;for(let i=0;i<4;i++){const iy=tH-cH-8-i*22;if(iy<5)continue;const svv=Math.sin(gT*.8+i+p.sd)*3.5;X.strokeStyle=sn==='autumn'?'#8a6a28':'#3a7828';X.lineWidth=1.8;X.lineCap='round';X.beginPath();X.moveTo(px+PW-3,iy);X.quadraticCurveTo(px+PW+svv+4,iy-5,px+PW+svv+2,iy-13);X.stroke();X.fillStyle=sn==='autumn'?'#c88828':'#4a8a38';X.beginPath();X.ellipse(px+PW+svv+2,iy-13,3,1.5,.5,0,Math.PI*2);X.fill()}X.restore()}}
   
-  // Sky color tint overlay
-  X.save();X.globalAlpha=0.06;X.fillStyle=`rgb(${tR},${tG},${tB2})`;X.fillRect(px-cX,0,PW+cX*2,tH);X.fillRect(px-cX,bY,PW+cX*2,bH);X.restore();
-  
-  // Wet sheen in spring/rain
-  if(theme==='hills'){const sn=getSeason().name;if(sn==='spring'||sn==='winter'){X.save();X.globalAlpha=0.06;const wsg=X.createLinearGradient(px,0,px+PW*.4,0);wsg.addColorStop(0,'rgba(255,255,255,0)');wsg.addColorStop(.5,'rgba(255,255,255,1)');wsg.addColorStop(1,'rgba(255,255,255,0)');X.fillStyle=wsg;X.fillRect(px,0,PW,tH);X.fillRect(px,bY,PW,bH);X.restore()}}
-  
-  // Pipe base puddle
-  X.save();X.globalAlpha=0.06;X.fillStyle='rgba(0,0,0,0.8)';X.beginPath();X.ellipse(px+PW/2,H-GND+3,PW*.65,4,0,0,Math.PI*2);X.fill();X.restore();
-  
   // Colored light reflection on ground from pipe
   X.save();X.globalAlpha=.04;X.fillStyle=theme==='ocean'?'#40c0a0':theme==='ruins'?'#554030':'#30a035';X.fillRect(px+4,H-GND,PW-8,12);X.restore();
-  // Close entry animation scale context
-  if(pipeScale<1)X.restore();
 }
 
 /* ═══ POWERUPS ═══ */
@@ -603,21 +495,9 @@ function spJP(){for(let i=0;i<6;i++)spP(bird.x-12,bird.y+8,-1.5-Math.random()*2.
 function spSF(){let f=floats.find(f=>!f.a);if(!f){f={};floats.push(f)}f.a=true;f.x=bird.x+30;f.y=bird.y-20;f.t="+1";f.lf=600;f.ml=600}
 function spPUP(x,y){for(let i=0;i<18;i++){const a=(Math.PI*2/18)*i,sp=2+Math.random()*3.5;spP(x,y,Math.cos(a)*sp,Math.sin(a)*sp,0,.97,2+Math.random()*3.5,400+Math.random()*200,['#00ccff','#80eeff','#fff','#00aaff','#40ffff'][i%5])}}
 
-function spAirPuff(bx,by){
-  if(airPuffParticles.length>40)return;
-  for(let i=0;i<5;i++){
-    const baseAngle=Math.PI+Math.PI*.55+(i-2)*(Math.PI/9);
-    const sp=1.2+Math.random()*1.8;
-    airPuffParticles.push({x:bx-10,y:by+5,vx:Math.cos(baseAngle)*sp,vy:Math.sin(baseAngle)*sp-.3,lf:150+Math.random()*80,ml:230,sz:1.5+Math.random()*2});
-  }
-}
-
-function updP(dt){
-  const physDtLocal=state==="DEAD"?dt*deathSlowMo:dt;
-  const s=physDtLocal/16.667;const sReal=dt/16.667;
-  for(let p of parts){if(!p.a)continue;p.x+=p.vx*s;p.y+=p.vy*s;p.vy+=p.ay*s;p.vx*=p.dr;// pow(dr,s) ≈ dr at 60fps (s≈1)
-    p.lf-=dt;if(p.lf<=0)p.a=false}
-  for(let f of floats){if(!f.a)continue;f.y-=1.8*sReal;f.lf-=dt;if(f.lf<=0)f.a=false}
+function updP(dt){const s=dt/16.667;
+  for(let p of parts){if(!p.a)continue;p.x+=p.vx*s;p.y+=p.vy*s;p.vy+=p.ay*s;p.vx*=Math.pow(p.dr,s);p.lf-=dt;if(p.lf<=0)p.a=false}
+  for(let f of floats){if(!f.a)continue;f.y-=1.8*s;f.lf-=dt;if(f.lf<=0)f.a=false}
   for(let t of trail){if(!t.a)continue;t.lf-=dt;if(t.lf<=0)t.a=false}
   // Update feather particles
   for(let i=featherParticles.length-1;i>=0;i--){const fp=featherParticles[i];fp.x+=fp.vx*s;fp.y+=fp.vy*s;fp.vy+=.15*s;fp.vx*=.98;fp.rot+=fp.rv*s;fp.lf-=dt;if(fp.lf<=0)featherParticles.splice(i,1)}
@@ -639,90 +519,26 @@ function updP(dt){
   bgTrain.timer+=dt;
   if(bgTrain.timer>12000){bgTrain.active=true;bgTrain.x=W+50;bgTrain.timer=0}
   if(bgTrain.active){bgTrain.x-=.8*s;if(bgTrain.x<-200)bgTrain.active=false}
-  // Air puff particles
-  for(let i=airPuffParticles.length-1;i>=0;i--){const ap=airPuffParticles[i];ap.x+=ap.vx*s;ap.y+=ap.vy*s;ap.lf-=dt;if(ap.lf<=0)airPuffParticles.splice(i,1)}
-  // Score color flash decay
-  if(scoreColorT>0)scoreColorT=Math.max(0,scoreColorT-dt);
-  // Combo banner decay
-  if(comboBannerT>0)comboBannerT=Math.max(0,comboBannerT-dt);
-  // Milestone flash decay
-  if(milestoneFlashT>0)milestoneFlashT=Math.max(0,milestoneFlashT-dt);
-  // Death slow-mo recovery
-  if(state==="DEAD"&&deathSlowMo<1)deathSlowMo+=(1-deathSlowMo)*(dt/600);
-  // City vertical offset for parallax
-  if(state==="PLAYING"){const targetOff=((bird.y-(H/2))/H)*3;cityVerticalOffset+=(targetOff-cityVerticalOffset)*.04*s}
-  // Pipe entry timer
-  for(const p of pipes){if(p.a&&p.entryT>0)p.entryT=Math.max(0,p.entryT-dt)}
-  // Flapster pitch based on score
-  flapPitchMult=Math.min(1.4,1+Math.floor(score/20)*.075);
-  // New best confetti
-  for(let i=newBestConfetti.length-1;i>=0;i--){const c=newBestConfetti[i];c.x+=c.vx*s;c.y+=c.vy*s;c.vy+=c.ay*s;c.rot+=c.rv*s;c.lf-=dt;if(c.lf<=0)newBestConfetti.splice(i,1)}
-  // Game over animations
-  if(state==="GAMEOVER"){goEntryT=Math.min(350,goEntryT+dt);goScoreCountT=Math.min(800,goScoreCountT+(goEntryT>=350?dt:0));goScoreDisplay=Math.round((goScoreCountT/800)*score);if(goScoreDisplay>score)goScoreDisplay=score;if(medalSpinT<600&&goEntryT>=350)medalSpinT=Math.min(600,medalSpinT+dt)}
-  // Idle wing on ready screen
-  if(state==="READY"){idleWingT+=dt;if(idleWingT>3500+Math.random()*1000){idleWingT=0;bird.wingPhase+=Math.PI*2;spAirPuff(bird.x,bird.y)}}
-  // Ambient particles by score milestone
-  if(score>=10&&Math.random()>.88&&fireflies.length<Math.min(12,particleBudget/5))fireflies.push({x:Math.random()*W,y:H-GND-15-Math.random()*50,vx:(Math.random()-.5)*.3,vy:-.2-Math.random()*.3,lf:2000+Math.random()*1500,ml:3500,sz:.8+Math.random()*1.4,phase:Math.random()*Math.PI*2});
-  for(let i=fireflies.length-1;i>=0;i--){const f=fireflies[i];f.x+=f.vx*s;f.y+=f.vy*s;f.lf-=dt;if(f.lf<=0||f.y<0)fireflies.splice(i,1)}
-  if(score>=25&&Math.random()>.92&&embers.length<Math.min(10,particleBudget/6))embers.push({x:bird.x+(Math.random()-.5)*60,y:H-GND,vx:(Math.random()-.5)*.8,vy:-1.2-Math.random()*1.5,lf:1200+Math.random()*800,ml:2000,sz:.8+Math.random()*1.2});
-  for(let i=embers.length-1;i>=0;i--){const e=embers[i];e.x+=e.vx*s;e.y+=e.vy*s;e.vx*=.995;e.lf-=dt;if(e.lf<=0||e.y<-10)embers.splice(i,1)}
-  if(score>=50&&Math.random()>.95&&sparkleMotes.length<12)sparkleMotes.push({x:Math.random()*W,y:60+Math.random()*(H-GND-80),rot:Math.random()*Math.PI*2,rv:.04+Math.random()*.08,lf:1500,ml:1500,sz:2+Math.random()*2.5});
-  for(let i=sparkleMotes.length-1;i>=0;i--){const sm=sparkleMotes[i];sm.rot+=sm.rv*s;sm.lf-=dt;if(sm.lf<=0)sparkleMotes.splice(i,1)}
-  // Adaptive particle budget
-  if(frameTimes.length>=5){const avg=frameTimes.reduce((a,b)=>a+b,0)/frameTimes.length;if(avg>20)particleBudget=Math.max(20,particleBudget*.8);else if(avg<14)particleBudget=Math.min(60,particleBudget+1)}
 }
 
 function drP(){
   // Impact rings
   for(const ir of impactRings){const t=ir.lf/ir.ml;X.save();X.globalAlpha=t*.5;X.strokeStyle=`rgba(255,180,50,${t})`;X.lineWidth=2*(1-t)+.5;X.beginPath();X.arc(ir.x,ir.y,ir.r,0,Math.PI*2);X.stroke();X.restore()}
-  // Trail — single save, manual alpha/fillStyle
-  {const active=trail.filter(t=>t.a);if(active.length){X.save();X.fillStyle=active[0]?.c||'#00ccff';
-    for(const t of active){const a=t.lf/t.ml;X.globalAlpha=a*.45;X.fillStyle=t.c;X.beginPath();X.arc(t.x,t.y,t.sz*a,0,Math.PI*2);X.fill()}
-    X.restore()}}
-  // Regular particles — group by color to minimise state changes
-  {const actP=parts.filter(p=>p.a);
-  if(actP.length){
-    X.save();X.shadowBlur=6;
-    // Sort by color to batch fillStyle changes
-    actP.sort((a,b)=>a.c<b.c?-1:1);
-    let lastC='';
-    for(const p of actP){const t=p.lf/p.ml;X.globalAlpha=t;if(p.c!==lastC){X.fillStyle=p.c;X.shadowColor=p.c;lastC=p.c}X.beginPath();X.arc(p.x,p.y,p.sz*(.4+t*.6),0,Math.PI*2);X.fill()}
-    X.restore();
-  }}
-  // Feather particles — one shadow setup, draw all
-  if(featherParticles.length){X.save();X.shadowBlur=4;
-    for(const fp of featherParticles){const t=fp.lf/fp.ml;X.save();X.translate(fp.x,fp.y);X.rotate(fp.rot);X.globalAlpha=t*.8;X.fillStyle=fp.c;X.shadowColor=fp.c;X.beginPath();X.ellipse(0,0,fp.sz,fp.sz*.35,.2,0,Math.PI*2);X.fill();X.restore()}
-    X.restore()}
+  // Trail
+  for(let t of trail){if(!t.a)continue;const a=t.lf/t.ml;X.save();X.globalAlpha=a*.45;X.fillStyle=t.c;X.beginPath();X.arc(t.x,t.y,t.sz*a,0,Math.PI*2);X.fill();X.restore()}
+  // Regular particles with bloom
+  parts.forEach(p=>{if(!p.a)return;const t=p.lf/p.ml;X.save();X.globalAlpha=t;X.fillStyle=p.c;X.shadowColor=p.c;X.shadowBlur=6;X.beginPath();X.arc(p.x,p.y,p.sz*(.4+t*.6),0,Math.PI*2);X.fill();X.restore()});
+  // Feather particles
+  for(const fp of featherParticles){const t=fp.lf/fp.ml;X.save();X.translate(fp.x,fp.y);X.rotate(fp.rot);X.globalAlpha=t*.8;X.fillStyle=fp.c;X.shadowColor=fp.c;X.shadowBlur=4;X.beginPath();X.ellipse(0,0,fp.sz,fp.sz*.35,.2,0,Math.PI*2);X.fill();X.restore()}
   // Score float
   floats.forEach(f=>{if(!f.a)return;const t=f.lf/f.ml,sc=1+(1-t)*.5;X.save();X.translate(f.x,f.y);X.scale(sc,sc);X.globalAlpha=t;X.font=`700 20px ${FR}`;X.textAlign="center";X.textBaseline="middle";X.fillStyle="#ffee00";X.shadowColor='#ffcc00';X.shadowBlur=12;X.strokeStyle='rgba(0,0,0,.4)';X.lineWidth=3;X.strokeText(f.t,0,0);X.fillText(f.t,0,0);X.restore()});
-  // Ambient dust motes — single fill style, batch
-  if(state==='PLAYING'){X.save();X.fillStyle='rgba(255,220,150,.8)';
-    for(const ap of ambientParticles){const pulse=.5+.5*Math.sin(ap.life*Math.PI*2);X.globalAlpha=ap.a*pulse*.4;X.beginPath();X.arc(ap.x,ap.y,ap.sz,0,Math.PI*2);X.fill()}
-    X.restore()}
-  // Air puff particles on flap
-  X.save();for(const ap of airPuffParticles){const t=ap.lf/ap.ml;X.globalAlpha=t*.6;X.fillStyle='rgba(255,252,240,.85)';X.beginPath();X.ellipse(ap.x,ap.y,ap.sz*(1+.6*(1-t)),ap.sz*.6,Math.atan2(ap.vy,ap.vx),0,Math.PI*2);X.fill()}X.restore();
-  // Fireflies (score 10+)
-  if(score>=10&&fireflies.length){X.save();X.fillStyle='rgba(200,255,120,1)';X.shadowColor='rgba(180,255,80,1)';X.shadowBlur=5;
-    for(const f of fireflies){const t=f.lf/f.ml,pulse=.5+.5*Math.sin(gT*8+f.phase);X.globalAlpha=t*pulse*.85;X.beginPath();X.arc(f.x,f.y,f.sz,0,Math.PI*2);X.fill()}
-    X.shadowBlur=0;X.restore()}
-  // Embers (score 25+)
-  if(score>=25&&embers.length){X.save();X.shadowColor='rgba(255,80,20,.8)';X.shadowBlur=4;
-    for(const e of embers){const t=e.lf/e.ml;X.globalAlpha=t*.9;X.fillStyle=`rgba(255,${80+t*100|0},20,1)`;X.beginPath();X.arc(e.x,e.y,e.sz,0,Math.PI*2);X.fill()}
-    X.shadowBlur=0;X.restore()}
-  // Sparkle motes (score 50+) — batch into single path per mote
-  if(score>=50&&sparkleMotes.length){X.save();X.strokeStyle='rgba(255,240,180,1)';X.lineWidth=1;
-    for(const sm of sparkleMotes){const t=sm.lf/sm.ml;X.save();X.globalAlpha=t*.8;X.translate(sm.x,sm.y);X.rotate(sm.rot);
-      X.beginPath();// 4 lines as one path
-      X.moveTo(-sm.sz,0);X.lineTo(sm.sz,0);X.moveTo(0,-sm.sz);X.lineTo(0,sm.sz);
-      X.stroke();X.restore()}
-    X.restore()}
-  // New best confetti
-  X.save();for(const c of newBestConfetti){const t=c.lf/c.ml;X.globalAlpha=t;X.save();X.translate(c.x,c.y);X.rotate(c.rot);X.fillStyle=c.c;X.fillRect(-c.w/2,-c.h/2,c.w,c.h);X.restore()}X.restore();
+  // Ambient dust motes
+  if(state==='PLAYING'){X.save();for(const ap of ambientParticles){const pulse=.5+.5*Math.sin(ap.life*Math.PI*2);X.globalAlpha=ap.a*pulse*.4;X.fillStyle='rgba(255,220,150,.8)';X.beginPath();X.arc(ap.x,ap.y,ap.sz,0,Math.PI*2);X.fill()}X.restore()}
 }
 
 /* ═══ WEATHER ═══ */
 function updW(dt){if(theme!=='hills')return;const sn=getSeason().name,s=dt/16.667;
-  if(sn==='winter'&&Math.random()>.8&&wParts.length<Math.min(60,particleBudget))wParts.push({t:'s',x:Math.random()*(W+40)-20,y:-5,vx:(Math.random()-.5)*.6,vy:.3+Math.random()*.4,sz:1+Math.random()*2.5,lf:8e3});
+  if(sn==='winter'&&Math.random()>.8)wParts.push({t:'s',x:Math.random()*(W+40)-20,y:-5,vx:(Math.random()-.5)*.6,vy:.3+Math.random()*.4,sz:1+Math.random()*2.5,lf:8e3});
   if(sn==='spring'&&Math.random()>.88)wParts.push({t:'r',x:Math.random()*W,y:-5,vx:-.5,vy:5+Math.random()*3,lf:3e3});
   if(sn==='autumn'&&Math.random()>.9){const c=['#d47300','#cc5500','#dd8844','#bb4422','#eea033'][Math.floor(Math.random()*5)];wParts.push({t:'l',x:Math.random()*(W+40)-20,y:-5,vx:-.2+Math.random()*.15,vy:.5+Math.random()*.6,sz:3+Math.random()*3,lf:1e4,rot:Math.random()*Math.PI*2,rv:(Math.random()-.5)*.03,c})}
   const wind=sn==='autumn'?.3:sn==='winter'?.15:0;
@@ -732,148 +548,99 @@ function drW(){if(theme!=='hills')return;X.save();for(const w of wParts){if(w.t=
 
 /* ═══ PREMIUM BACKGROUND — Hills with 5-layer city ═══ */
 const PAL={dawn:{t:[255,150,90],b:[255,190,120],g:[255,200,110],cA:.28},day:{t:[65,175,255],b:[115,205,255],g:[255,235,130],cA:.42},dusk:{t:[255,85,40],b:[160,55,185],g:[255,160,65],cA:.26},night:{t:[6,12,42],b:[15,28,65],g:[160,185,255],cA:.1}};
-// Sky cache — recompute only when dayC changes enough
-let _skyCache=null,_skyCacheKey=-1;
-function getSky(){
-  const k=Math.round(dayC*1000);
-  if(k===_skyCacheKey&&_skyCache)return _skyCache;
-  _skyCacheKey=k;
-  let f,t_,tt;
-  if(dayC<.15){f=PAL.night;t_=PAL.dawn;tt=dayC/.15}
-  else if(dayC<.45){f=PAL.dawn;t_=PAL.day;tt=(dayC-.15)/.3}
-  else if(dayC<.6){f=PAL.day;t_=PAL.dusk;tt=(dayC-.45)/.15}
-  else if(dayC<.75){f=PAL.dusk;t_=PAL.night;tt=(dayC-.6)/.15}
-  else{f=PAL.night;t_=PAL.night;tt=0}
-  const nA=dayC>=.7||dayC<.1?1:dayC>=.6?(dayC-.6)/.1:dayC<.2?1-(dayC-.1)/.1:0;
-  const sA=(dayC>=.15&&dayC<.55)?(dayC<.25?(dayC-.15)/.1:dayC>.45?1-(dayC-.45)/.1:1):0;
-  _skyCache={t:mc(f.t,t_.t,tt),b:mc(f.b,t_.b,tt),g:mc(f.g,t_.g,tt),cA:lp(f.cA,t_.cA,tt),sA:cl(nA,0,1),mA:cl(nA-.2,0,1),snA:cl(sA,0,1)};
-  return _skyCache;
-}
+function getSky(){let f,t_,tt;if(dayC<.15){f=PAL.night;t_=PAL.dawn;tt=dayC/.15}else if(dayC<.45){f=PAL.dawn;t_=PAL.day;tt=(dayC-.15)/.3}else if(dayC<.6){f=PAL.day;t_=PAL.dusk;tt=(dayC-.45)/.15}else if(dayC<.75){f=PAL.dusk;t_=PAL.night;tt=(dayC-.6)/.15}else{f=PAL.night;t_=PAL.night;tt=0}const nA=dayC>=.7||dayC<.1?1:dayC>=.6?(dayC-.6)/.1:dayC<.2?1-(dayC-.1)/.1:0;const sA=(dayC>=.15&&dayC<.55)?(dayC<.25?(dayC-.15)/.1:dayC>.45?1-(dayC-.45)/.1:1):0;return{t:mc(f.t,t_.t,tt),b:mc(f.b,t_.b,tt),g:mc(f.g,t_.g,tt),cA:lp(f.cA,t_.cA,tt),sA:cl(nA,0,1),mA:cl(nA-.2,0,1),snA:cl(sA,0,1)}}
 
 // === PREMIUM CITY SKYLINE DRAWING ===
-function drawCityLayer(layer,scrollX,baseY,layerIdx){
-  const {buildings,alpha,scale,depthRGB}=layer;
+function drawCityLayer(layer,scrollX,baseY){
+  const {buildings,alpha,scale}=layer;
   const isNight=dayC<.15||dayC>.7;
   const isDusk=dayC>.55&&dayC<.75;
-  const winAlpha=isNight?alpha*1.8:isDusk?alpha*1.2:alpha*.4;
-  const vOff=cityVerticalOffset*(1-layerIdx*.15);
-
+  
   for(const b of buildings){
-    // Scrolled X with wrap
-    let rawBx=(b.x-scrollX)%(W*2.5+50);
-    if(rawBx<-50)rawBx+=W*2.5+50;
-    const bx=rawBx-50;
-    const bw=b.w*scale;
-    if(bx>W+60||bx+bw<-20)continue;
+    const bx=((b.x-scrollX)%(W*2.5+50))-50;
+    if(bx>W+60||bx+b.w*scale<-20)continue;
     const bh=b.h*scale;
-    // Top shifts with vertical parallax; bottom stays at layer ground line
-    const bTop=baseY-bh+vOff;
-    const bBot=baseY;
-
-    // Body gradient (horizontal side-lighting)
-    const bg=X.createLinearGradient(bx,0,bx+bw,0);
-    const dc=depthRGB||'50,40,70';
-    bg.addColorStop(0,`rgba(${dc},${alpha*.8})`);
-    bg.addColorStop(.4,`rgba(${dc},${alpha})`);
-    bg.addColorStop(.7,`rgba(${dc},${alpha*.9})`);
-    bg.addColorStop(1,`rgba(${dc},${alpha*.6})`);
+    const by=baseY-bh;
+    const bw=b.w*scale;
+    
+    // Building silhouette with slight color variation per layer
+    const depthColor=layer===cityLayers[0]?'rgba(18,20,35':
+                     layer===cityLayers[1]?'rgba(28,25,50':
+                     layer===cityLayers[2]?'rgba(50,40,70':
+                     layer===cityLayers[3]?'rgba(70,55,85':
+                                           'rgba(90,70,95';
+    // Building body gradient
+    const bg=X.createLinearGradient(bx,by,bx+bw,by);
+    bg.addColorStop(0,`${depthColor},${alpha*.8})`);
+    bg.addColorStop(.4,`${depthColor},${alpha})`);
+    bg.addColorStop(.7,`${depthColor},${alpha*.9})`);
+    bg.addColorStop(1,`${depthColor},${alpha*.6})`);
     X.fillStyle=bg;
-
-    // Window-safe bounds — where windows can actually appear
-    // Default: full building rect interior
-    let wTop=bTop+2, wBot=bBot-2, wLeft=bx+2, wRight=bx+bw-2;
-
+    
+    // Different building styles
     if(b.style===2){
-      // Art-deco spire: lower rectangular portion only
-      X.beginPath();
-      X.moveTo(bx,bBot);
-      X.lineTo(bx,bTop+bh*.3);
-      X.lineTo(bx+bw*.2,bTop+bh*.2);
-      X.lineTo(bx+bw*.4,bTop+2);
-      X.lineTo(bx+bw*.5,bTop);
-      X.lineTo(bx+bw*.6,bTop+2);
-      X.lineTo(bx+bw*.8,bTop+bh*.2);
-      X.lineTo(bx+bw,bTop+bh*.3);
-      X.lineTo(bx+bw,bBot);
-      X.closePath();X.fill();
-      // Windows only below the taper point
-      wTop=bTop+bh*.33;
-      wLeft=bx+bw*.06;wRight=bx+bw*.94;
+      // Art-deco spire
+      X.beginPath();X.moveTo(bx,baseY);X.lineTo(bx,by+bh*.3);X.lineTo(bx+bw*.2,by+bh*.2);X.lineTo(bx+bw*.4,by+2);X.lineTo(bx+bw*.5,by);X.lineTo(bx+bw*.6,by+2);X.lineTo(bx+bw*.8,by+bh*.2);X.lineTo(bx+bw,by+bh*.3);X.lineTo(bx+bw,baseY);X.closePath();X.fill();
     } else if(b.style===3){
-      // Stepped: lower main body + upper narrow setback
-      const lTop=bTop+bh*.16;
-      X.fillRect(bx,lTop,bw,bBot-lTop);
-      X.fillRect(bx+bw*.1,bTop,bw*.8,bh*.18);
-      // Windows only in lower main block
-      wTop=lTop+2;
-      wLeft=bx+2;wRight=bx+bw-2;
+      // Stepped modern
+      X.fillRect(bx,by+bh*.15,bw,bh*.85);
+      X.fillRect(bx+bw*.1,by,bw*.8,bh*.2);
     } else {
-      X.fillRect(bx,bTop,bw,bh);
+      X.fillRect(bx,by,bw,bh);
     }
-
-    // Rooftop antenna on mid-near layers
-    if(scale>.6&&alpha>.3&&b.style!==2){
+    
+    // Rooftop details (antennas, water towers) on mid-near layers
+    if(scale>.6&&alpha>.3){
       X.fillStyle=`rgba(80,65,95,${alpha*.7})`;
-      X.fillRect(bx+bw*.5-.5*scale,bTop-8*scale,scale,8*scale);
-      X.beginPath();X.arc(bx+bw*.5,bTop-8*scale,1.5*scale,0,Math.PI*2);X.fill();
+      if(b.style!==2){
+        // Antenna
+        X.fillRect(bx+bw*.5-0.5,by-8*scale,1*scale,8*scale);
+        X.beginPath();X.arc(bx+bw*.5,by-8*scale,1.5*scale,0,Math.PI*2);X.fill();
+      }
     }
-
-    // Window lights — strictly inside wTop/wBot/wLeft/wRight
-    if(scale>.45&&alpha>.2&&winAlpha>.04){
-      const {cols,rows,winW,winH,lit,litColor,tvSeed}=b;
-      const areaW=wRight-wLeft;
-      const areaH=wBot-wTop;
-      if(areaW<4||areaH<4||cols<1||rows<1)continue;
-      const cellW=areaW/cols;
-      const cellH=areaH/rows;
-
+    
+    // Window lights
+    if(scale>.45&&alpha>.2){
+      const cols=Math.max(1,Math.floor(bw/8));
+      const rows=Math.max(1,Math.floor(bh/12));
+      const winW=Math.min(4,bw/cols*.6);
+      const winH=4*scale;
+      const winAlpha=isNight?alpha*1.8:isDusk?alpha*1.2:alpha*.4;
+      
       for(let row=0;row<rows;row++){
         for(let col=0;col<cols;col++){
           const wi=row*cols+col;
-          if(wi>=lit.length||!lit[wi])continue;
-          // Window center → pixel coords within safe area
-          const wx=wLeft+cellW*(col+.5)-winW*.5;
-          const wy=wTop+cellH*(row+.5)-winH*.5;
-          // Hard clamp — belt-and-suspenders
-          if(wx<wLeft||wx+winW>wRight+.5)continue;
-          if(wy<wTop||wy+winH>wBot+.5)continue;
-
-          const wtype=litColor[wi]||'warm';
-          const seed=tvSeed?tvSeed[wi]:50;
-          const isTVflicker=seed>88;
-          const isOffice=seed>80&&seed<=88;
-          let wAMod=1;
-          if(isTVflicker){const tc=(gT*3.5+seed*.5)%1;wAMod=tc<.8?.4+Math.abs(Math.sin(tc*25))*.6:1}
-          else if(isOffice){const oc=(gT*.33+seed*.1)%1;wAMod=oc<.5?1-(oc*2)*.6:.4}
-          const wa=winAlpha*wAMod;
-          if(wa<.015)continue;
-
-          X.fillStyle=wtype==='cool'?`rgba(160,210,255,${wa})`:wtype==='green'?`rgba(150,220,150,${wa*.8})`:`rgba(255,210,130,${wa})`;
+          const litIdx=wi%b.lit.length;
+          if(!b.lit[litIdx])continue;
+          const wx=bx+bw*(col+.5)/cols-winW/2;
+          const wy=by+bh*(row+.5)/rows-winH/2;
+          if(wy<by+2||wy>baseY-4)continue;
+          const wtype=b.litColor[litIdx]||'warm';
+          const wc=wtype==='cool'?`rgba(160,210,255,${winAlpha})`:wtype==='green'?`rgba(150,220,150,${winAlpha*.8})`:`rgba(255,210,130,${winAlpha})`;
+          X.fillStyle=wc;
           X.fillRect(wx,wy,winW,winH);
-
-          // Bloom only for close layers at night (perf guard)
-          if(isNight&&winAlpha>.3&&layerIdx>=3){
-            const br=4*scale;
-            const wg=X.createRadialGradient(wx+winW*.5,wy+winH*.5,0,wx+winW*.5,wy+winH*.5,br);
-            wg.addColorStop(0,wtype==='cool'?'rgba(160,210,255,.09)':'rgba(255,210,130,.08)');
+          // Window bloom
+          if(isNight&&winAlpha>.2){
+            const wg=X.createRadialGradient(wx+winW/2,wy+winH/2,0,wx+winW/2,wy+winH/2,5*scale);
+            wg.addColorStop(0,wtype==='cool'?'rgba(160,210,255,.12)':'rgba(255,210,130,.1)');
             wg.addColorStop(1,'rgba(0,0,0,0)');
-            X.fillStyle=wg;X.beginPath();X.arc(wx+winW*.5,wy+winH*.5,br,0,Math.PI*2);X.fill();
+            X.fillStyle=wg;X.beginPath();X.arc(wx+winW/2,wy+winH/2,5*scale,0,Math.PI*2);X.fill();
           }
         }
       }
     }
   }
 }
+
 function drawGodRays(skyColor,baseY){
   const alpha=.06+tensionLevel*.04;
-  const cx=W*.65,cy=80;
+  const cx=W*.65,cy=80; // sun position
   X.save();
-  for(let i=0;i<4;i++){// 4 rays is visually indistinguishable from 6
-    const a=godRayAngle+i*1.57+i*.15;
-    const len=260+Math.sin(gT*.7+i)*50;
-    const w=18+Math.sin(gT+i*1.3)*7;
-    const rayAlpha=alpha*(0.4+0.6*Math.abs(Math.sin(gT*.5+i)));
-    X.globalAlpha=rayAlpha;
+  for(let i=0;i<6;i++){
+    const a=godRayAngle+i*1.05+i*.2;
+    const len=300+Math.sin(gT*.7+i)*60;
+    const w=20+Math.sin(gT+i*1.3)*8;
+    X.globalAlpha=alpha*(0.4+0.6*Math.abs(Math.sin(gT*.5+i)));
     const rg=X.createLinearGradient(cx,cy,cx+Math.cos(a)*len,cy+Math.sin(a)*len);
     rg.addColorStop(0,`rgba(${skyColor[0]},${skyColor[1]},180,${alpha*2})`);
     rg.addColorStop(1,'rgba(255,180,80,0)');
@@ -890,9 +657,6 @@ function drawGodRays(skyColor,baseY){
 function drawBG_hills(){
   const sky=getSky(),scc=sc_(),sn=getSeason().name,baseY=H-GND;
   const skyT=mc(sky.t,scc.sk,.28),skyB=mc(sky.b,scc.sk,.12);
-  
-  // Colorblind mode filter
-  if(cbMode===2){X.fillStyle='#000';X.fillRect(0,0,W,H)}
   
   // === 6-STOP CINEMATIC SKY GRADIENT ===
   const sg=X.createLinearGradient(0,0,0,baseY);
@@ -912,22 +676,10 @@ function drawBG_hills(){
   X.fillStyle=hazeG;X.fillRect(0,baseY-120,W,120);
   
   // === STARS ===
-  if(sky.sA>.01){X.save();X.beginPath();// batch white stars in one path
-    const crossStars=[];
-    for(const s of stars){
-      const tw=.4+.6*Math.abs(Math.sin(gT*s.ts+s.to));
-      const alpha=sky.sA*s.b*tw;
-      if(alpha<.02)continue;
-      X.globalAlpha=alpha;
-      if(s.hue>0)X.fillStyle=`hsl(${s.hue},80%,88%)`;
-      else X.fillStyle='#fff';
-      X.beginPath();X.arc(s.x,s.y,s.r,0,Math.PI*2);X.fill();
-      if(s.r>1.5&&tw>.82)crossStars.push({x:s.x,y:s.y,a:alpha});
-    }
-    // Draw cross halos for bright stars
-    X.fillStyle='#fff';
-    for(const cs of crossStars){X.globalAlpha=cs.a*.28;X.fillRect(cs.x-3.5,cs.y-.3,7,.6);X.fillRect(cs.x-.3,cs.y-3.5,.6,7)}
-    X.restore()}
+  if(sky.sA>.01){X.save();for(const s of stars){const tw=.4+.6*Math.abs(Math.sin(gT*s.ts+s.to));X.globalAlpha=sky.sA*s.b*tw;
+    if(s.hue>0){X.fillStyle=`hsl(${s.hue},80%,88%)`}else{X.fillStyle="#fff"}
+    X.beginPath();X.arc(s.x,s.y,s.r,0,Math.PI*2);X.fill();
+    if(s.r>1.5&&tw>.82){X.globalAlpha*=.28;X.fillRect(s.x-3.5,s.y-.3,7,.6);X.fillRect(s.x-.3,s.y-3.5,.6,7)}}X.restore()}
   
   // === SUN with god rays ===
   if(sky.snA>.01){
@@ -950,17 +702,16 @@ function drawBG_hills(){
   // === CLOUDS ===
   const cA=sky.cA*(sn==='spring'?1.4:sn==='winter'?1.5:1);
   const CLOUD_WRAP=W+200;
-  const isDusk2=dayC>.55&&dayC<.75;
-  const cTint=sn==='winter'?'215,222,232':sn==='autumn'?'232,220,205':`255,${250-tensionLevel*30|0},${240-tensionLevel*50|0}`;
-  for(let l=0;l<3;l++){const off=[bgF,bgM,bgM*.6][l],cby=[65,120,170][l],al=cA*[.45,.7,.9][l],s2=[1.4,1.1,.85][l];if(al<.01)continue;
-    X.save();
-    for(let i=-1;i<7;i++){const cx=sw(i*160-off,CLOUD_WRAP)-100,cy=cby+Math.sin(i*1.7)*18;
-      if(cx+60*s2<-10||cx-10>W+10)continue;// skip offscreen
+  for(let l=0;l<3;l++){const off=[bgF,bgM,bgM*.6][l],by=[65,120,170][l],al=cA*[.45,.7,.9][l],s2=[1.4,1.1,.85][l];if(al<.01)continue;
+    X.save();const cTint=sn==='winter'?'215,222,232':sn==='autumn'?'232,220,205':`255,${250-tensionLevel*30},${240-tensionLevel*50}`;
+    for(let i=-1;i<7;i++){const cx=sw(i*160-off,CLOUD_WRAP)-100,cy=by+Math.sin(i*1.7)*18;
+      // 3D volumetric cloud
       const cg=X.createRadialGradient(cx+18,cy-6,6,cx+18,cy,38*s2);
       cg.addColorStop(0,`rgba(${cTint},${al*1.3})`);cg.addColorStop(.5,`rgba(${cTint},${al*.9})`);cg.addColorStop(1,`rgba(${cTint},${al*.12})`);
       X.fillStyle=cg;
       X.beginPath();X.arc(cx,cy,22*s2,0,Math.PI*2);X.arc(cx+22*s2,cy-10*s2,18*s2,0,Math.PI*2);X.arc(cx+42*s2,cy-3*s2,22*s2,0,Math.PI*2);X.arc(cx+16*s2,cy+5*s2,14*s2,0,Math.PI*2);X.arc(cx+30*s2,cy+4*s2,12*s2,0,Math.PI*2);X.fill();
-      if(isDusk2){const cu=X.createLinearGradient(cx,cy,cx,cy+12*s2);cu.addColorStop(0,'rgba(0,0,0,0)');cu.addColorStop(1,`rgba(180,80,20,${al*.25})`);X.fillStyle=cu;X.beginPath();X.arc(cx,cy,22*s2,0,Math.PI*2);X.arc(cx+22*s2,cy-10*s2,18*s2,0,Math.PI*2);X.arc(cx+42*s2,cy-3*s2,22*s2,0,Math.PI*2);X.fill()}}
+      // Cloud underside shadow (warm lit from below in dusk)
+      const isDusk2=dayC>.55&&dayC<.75;if(isDusk2){const cu=X.createLinearGradient(cx,cy,cx,cy+12*s2);cu.addColorStop(0,'rgba(0,0,0,0)');cu.addColorStop(1,`rgba(180,80,20,${al*.25})`);X.fillStyle=cu;X.beginPath();X.arc(cx,cy,22*s2,0,Math.PI*2);X.arc(cx+22*s2,cy-10*s2,18*s2,0,Math.PI*2);X.arc(cx+42*s2,cy-3*s2,22*s2,0,Math.PI*2);X.fill()}}
     X.restore()}
   
   // Jet contrail
@@ -971,52 +722,18 @@ function drawBG_hills(){
   
   // === 5-LAYER CITY SKYLINE ===
   const nightAlphaBoost=sky.sA>.3?1.5:1;
-  // Aurora effect (nightness > 0.6, top 15% of sky)
-  const nightness=(dayC<.15||dayC>.7)?1:(dayC>.6?(dayC-.6)/.1:dayC<.2?1-(dayC-.1)/.1:0);
-  if(nightness>.6&&particleBudget>25){X.save();const auroraAlpha=(nightness-.6)/.4;
-    for(let ai=0;ai<3;ai++){// 3 ribbons is sufficient
-      const ay=H*.03+ai*(H*.03);
-      const freq=.006+ai*.002;const amp=7+ai*4;
-      X.beginPath();
-      for(let ax=0;ax<=W;ax+=6){// step 6px instead of 3
-        const aY=ay+Math.sin(ax*freq+gT*.3+ai*1.2)*amp+Math.cos(ax*freq*.5+gT*.2)*amp*.4;
-        ax===0?X.moveTo(ax,aY):X.lineTo(ax,aY);
-      }
-      X.strokeStyle=`rgba(0,220,120,${(.04+ai*.012)*auroraAlpha})`;
-      X.lineWidth=7+ai*5;X.stroke();
-    }
-    X.restore()}
   for(let li=0;li<cityLayers.length;li++){
     const layer=cityLayers[li];
-    const scrollX=(bgF*layer.speed)%(W*2.5+50);
-    const layerBaseY=baseY-[0,8,18,28,40][li];
+    const scrollX=bgF*layer.speed;
+    const layerBaseY=baseY-[0,8,18,30,0][li];
     X.save();
-    // Depth of field: blur farthest layer with CSS filter (no extra canvas needed)
-    if(li===0)X.filter='blur(1.2px)';
-    if(li<2)X.globalAlpha=nightAlphaBoost;
-    drawCityLayer(layer,scrollX,layerBaseY,li);
-    if(li===0)X.filter='none';
+    // Aerial perspective — blur far layers slightly
+    if(li<2){X.globalAlpha=nightAlphaBoost}
+    drawCityLayer(layer,scrollX,layerBaseY);
     X.restore();
     // Layer haze (aerial perspective)
     if(li<3){const hazeA=.04-li*.012;const hg=X.createLinearGradient(0,layerBaseY-80,0,layerBaseY);hg.addColorStop(0,'rgba(0,0,0,0)');hg.addColorStop(1,rgb(skyT,hazeA));X.fillStyle=hg;X.fillRect(0,layerBaseY-80,W,80)}
   }
-  // Window light spill on ground from nearest city layer
-  const nearLayer=cityLayers[4];if(nearLayer&&(dayC<.15||dayC>.7)){X.save();X.globalAlpha=.04;const spill=X.createLinearGradient(0,baseY-6,0,baseY+3);spill.addColorStop(0,'rgba(255,200,100,1)');spill.addColorStop(1,'rgba(255,200,100,0)');X.fillStyle=spill;X.fillRect(0,baseY-6,W,9);X.restore()}
-  // Neon signs (near buildings)
-  X.save();
-  for(const ns of neonSigns){
-    const nx=((ns.x-bgN)%(W+60))-30;if(nx<-25||nx>W+25)continue;
-    ns.hue=(gT*30+ns.phase*60)%360;
-    const neonC=`hsl(${ns.hue|0},100%,60%)`;
-    const neonA=.65+Math.sin(gT*.5+ns.phase)*.25;
-    // Neon rect
-    X.shadowColor=neonC;X.shadowBlur=14;X.fillStyle=neonC;X.globalAlpha=neonA;
-    X.fillRect(nx,ns.y,20,8);
-    // Bloom halo (skip radial gradient — use shadow instead)
-    X.shadowBlur=22;X.globalAlpha=.08;
-    X.fillRect(nx-4,ns.y-4,28,16);
-  }
-  X.shadowBlur=0;X.restore();
   
   // === LIGHT POLLUTION DOME ===
   const lpg=X.createRadialGradient(W/2,baseY,0,W/2,baseY,200);
@@ -1093,38 +810,18 @@ function drawGr(){
   if(theme!=='hills')return;
   const gy=H-GND,scc_=sc_(),sn=getSeason().name;const gT_=scc_.g1,gB=scc_.g2;
   
-  // Ground sub-layers: grass top (×1.2), mid dirt (×1.0), base rock (×0.8)
-  const topGrassY=gy,midDirtY=gy+8,baseRockY=gy+18;
-  
-  // Base rock layer (scrolls slowest)
-  const rkScroll=bgN*.8;const rg=X.createLinearGradient(0,baseRockY,0,H);
-  rg.addColorStop(0,'rgb(145,110,80)');rg.addColorStop(.4,'rgb(130,100,70)');rg.addColorStop(1,'rgb(115,88,60)');
-  X.fillStyle=rg;X.fillRect(0,baseRockY,W,H-baseRockY);
-  // Rock texture lines
-  X.fillStyle='rgba(100,75,50,.06)';
-  for(let i=0;i<6;i++){const rx=sw(i*52-rkScroll*.5,W+60)-30;X.fillRect(rx,baseRockY,24,H-baseRockY)}
-  
-  // Mid dirt band
-  const dg=X.createLinearGradient(0,midDirtY,0,baseRockY);
-  dg.addColorStop(0,rgb(mc(gB,[130,100,60],.5)));
-  dg.addColorStop(1,'rgb(148,118,85)');
-  X.fillStyle=dg;X.fillRect(0,midDirtY,W,baseRockY-midDirtY);
-  
-  // Top grass strip (scrolls fastest)
-  const gg=X.createLinearGradient(0,gy,0,midDirtY);
+  // Rich multi-stop ground gradient
+  const gg=X.createLinearGradient(0,gy,0,H);
   gg.addColorStop(0,rgb(mc(gT_,[255,255,255],.1)));
-  gg.addColorStop(.5,rgb(gT_));
-  gg.addColorStop(1,rgb(mc(gT_,gB,.6)));
-  X.fillStyle=gg;X.fillRect(0,gy,W,midDirtY-gy);
+  gg.addColorStop(.04,rgb(gT_));
+  gg.addColorStop(.12,rgb(mc(gT_,gB,.4)));
+  gg.addColorStop(.3,'rgb(160,135,100)');
+  gg.addColorStop(.6,'rgb(148,118,85)');
+  gg.addColorStop(1,'rgb(130,100,70)');
+  X.fillStyle=gg;X.fillRect(0,gy,W,GND);
   
-  // Checkerboard warning stripe
+  // Checkerboard warning stripe at top (like classic Flappy)
   for(let i=0;i<Math.ceil(W/16);i++){if(i%2===0)continue;X.fillStyle='rgba(255,255,255,.08)';X.fillRect(i*16,gy,16,5)}
-  
-  // Ground fog strip - 18px gradient above ground
-  const fog=X.createLinearGradient(0,gy-18,0,gy);
-  fog.addColorStop(0,'rgba(0,0,0,0)');
-  fog.addColorStop(1,'rgba(0,0,0,.14)');
-  X.fillStyle=fog;X.fillRect(0,gy-18,W,18);
   
   // Specular sheen on ground top
   const sheen=X.createLinearGradient(0,gy,0,gy+6);
@@ -1134,20 +831,10 @@ function drawGr(){
   // Ground edge highlight
   X.fillStyle='rgba(255,255,255,.04)';X.fillRect(0,gy,W,1.5);
   
-  // Grass blades — seamless with per-blade resonant frequency + bird proximity
+  // Grass blades — seamless
   const GRASS_WRAP=W+100;const gc=rgb(mc(gT_,[0,0,0],.14),.35);
   X.save();X.strokeStyle=gc;X.lineWidth=1.2;
-  const grassScroll=bgN*1.2; // top grass scrolls ×1.2
-  for(let i=-8;i<40;i++){
-    const gx=sw(i*13-grassScroll,GRASS_WRAP)-50;
-    const resonance=.8+((i*7)%11)*.12; // unique frequency per blade
-    const gh=3+(.8+i%5)*1.4+Math.sin(i*1.7+gT*2*resonance)*.4;
-    const wind=sn==='autumn'?Math.sin(gT*3+i)*.7:sn==='winter'?Math.sin(gT*2+i)*.2:0;
-    // Bird proximity bending
-    const birdDist=Math.abs(bird.x-gx);const proxBend=birdDist<40?(40-birdDist)/40*2.5:0;
-    const bendDir=gx<bird.x?-1:1;
-    X.beginPath();X.moveTo(gx,gy);X.quadraticCurveTo(gx+wind+.8+bendDir*proxBend,gy-gh*.55,gx+wind+1.6+bendDir*proxBend*1.3,gy-gh);X.stroke()
-  }
+  for(let i=-8;i<40;i++){const gx=sw(i*13-bgN*1.4,GRASS_WRAP)-50;const gh=3+(.8+i%5)*1.4+Math.sin(i*1.7+gT*2)*.4;const wind=sn==='autumn'?Math.sin(gT*3+i)*.7:sn==='winter'?Math.sin(gT*2+i)*.2:0;X.beginPath();X.moveTo(gx,gy);X.quadraticCurveTo(gx+wind+.8,gy-gh*.55,gx+wind+1.6,gy-gh);X.stroke()}
   X.restore();
   
   // Puddle reflections on ground
@@ -1166,7 +853,7 @@ function chkCol(){
     if(bx+br>p.x-4&&bx-br<p.x+PW+4){
       if(by-br<p.gy||by+br>p.gy+p.gap){return true}
       // Near-miss detection
-      const margin=12;if((by-br<p.gy+margin||by+br>p.gy+p.gap-margin)&&!(by-br<p.gy||by+br>p.gy+p.gap)){nearMissFlash=1;comboCount=0;AU.play('nearmiss');haptic('nearmiss')}
+      const margin=12;if((by-br<p.gy+margin||by+br>p.gy+p.gap-margin)&&!(by-br<p.gy||by+br>p.gy+p.gap)){nearMissFlash=1}
     }
   }
   return false
@@ -1182,10 +869,7 @@ function drawHUD(){
   const pillW=Math.max(72,scoreStr.length*30+44),pillH=46,pillX=W/2-pillW/2,pillY=14;
   // Pill background — subtle dark glass
   X.fillStyle='rgba(0,0,0,.28)';rr(pillX,pillY,pillW,pillH,22);X.fill();
-  // Best approach tension: pulse gold border
-  const gapToBest=best-score;let pillBorderAlpha=.12,pillBorderGlow=0;
-  if(best>0&&gapToBest>0&&gapToBest<=3){const intensity=(4-gapToBest)/3;const pulse=.5+.5*Math.sin(gT*(8+intensity*8));pillBorderAlpha=.25+pulse*.45*intensity;pillBorderGlow=14*intensity*pulse;X.shadowColor='#ffd700';X.shadowBlur=pillBorderGlow}
-  X.strokeStyle=`rgba(255,210,50,${pillBorderAlpha})`;X.lineWidth=gapToBest<=1&&best>0?2:1;rr(pillX,pillY,pillW,pillH,22);X.stroke();X.shadowBlur=0;
+  X.strokeStyle='rgba(255,210,50,.12)';X.lineWidth=1;rr(pillX,pillY,pillW,pillH,22);X.stroke();
   // Top gloss
   X.fillStyle='rgba(255,255,255,.04)';rr(pillX+1,pillY+1,pillW-2,pillH/2,20);X.fill();
   // Soft yellow glow behind number
@@ -1196,9 +880,8 @@ function drawHUD(){
   X.fillStyle='rgba(120,70,0,.7)';X.fillText(scoreStr,2,3);
   // Dark stroke outline
   X.strokeStyle='rgba(80,40,0,.8)';X.lineWidth=3.5;X.strokeText(scoreStr,0,0);
-  // Score color flash: white→#ffee00 on score
-  const scoreColor=scoreColorT>200?`rgba(255,255,255,${(scoreColorT-200)/80})`:'#ffee00';
-  X.fillStyle=scoreColor;X.fillText(scoreStr,0,0);
+  // Main yellow fill — same hue as +1 float (#ffee00)
+  X.fillStyle='#ffee00';X.fillText(scoreStr,0,0);
   // Inner highlight on top of letters
   X.fillStyle='rgba(255,255,255,.25)';X.font=`900 28px ${FR}`;X.fillText(scoreStr,0,-1);
   X.restore();
@@ -1207,15 +890,6 @@ function drawHUD(){
     X.font=`500 7px ${FN}`;X.textAlign='center';
     X.fillStyle='rgba(255,220,60,.65)';X.fillText(`${gap} away from best!`,W/2,pillY+pillH+10);
   }}
-  // Combo banner
-  if(comboBannerT>0&&comboBannerText){const bt=comboBannerT/1200,bannerY=pillY+pillH+24;X.globalAlpha=Math.min(1,bt*3)*(bt<.3?bt*3:1);
-    const isLeg=comboBannerText==='LEGENDARY!';const isAmaz=comboBannerText==='AMAZING!';
-    if(isLeg){const t=gT*3;const r=Math.round(255*(.5+.5*Math.sin(t)));const g2=Math.round(255*(.5+.5*Math.sin(t+2)));const b2=Math.round(255*(.5+.5*Math.sin(t+4)));X.shadowColor=`rgb(${r},${g2},${b2})`;X.shadowBlur=14;X.fillStyle=`rgb(${r},${g2},${b2})`}
-    else if(isAmaz){X.shadowColor='#ffd700';X.shadowBlur=12;X.fillStyle='#ffd700'}
-    else{X.shadowColor='#00eeff';X.shadowBlur=10;X.fillStyle='#00eeff'}
-    X.font=`800 13px ${FR}`;X.textAlign='center';X.textBaseline='middle';X.fillText(comboBannerText,W/2,bannerY);
-    X.shadowBlur=0;X.globalAlpha=1;
-  }
   X.restore();
   
   // Shield bar
@@ -1238,12 +912,6 @@ function drawHUD(){
 
 /* ═══ CINEMATIC POST-PROCESSING OVERLAY ═══ */
 function drawPostFX(){
-  // Adaptive sky color grading: warm orange overlay based on tension
-  if(tensionLevel>0&&state==="PLAYING"){X.save();X.globalAlpha=tensionLevel*.04;X.globalCompositeOperation='multiply';X.fillStyle=`rgba(255,100,0,1)`;X.fillRect(0,0,W,H);X.globalCompositeOperation='source-over';X.restore()}
-  
-  // Milestone full-screen radial flash
-  if(milestoneFlashT>0){const total=500,bloom=200,fade=300;let a;if(milestoneFlashT>fade){const t=(milestoneFlashT-fade)/bloom;a=t*.7}else{a=(milestoneFlashT/fade)*.35}if(!reducedMotion){const mf=X.createRadialGradient(W/2,H/2,0,W/2,H/2,W*.7);mf.addColorStop(0,`rgba(255,255,255,${a})`);mf.addColorStop(.5,`rgba(255,230,100,${a*.4})`);mf.addColorStop(1,'rgba(255,200,50,0)');X.fillStyle=mf;X.fillRect(0,0,W,H)}}
-  
   // Vignette — always present, deeper when tense
   const vignette=X.createRadialGradient(W/2,H/2,H*.35,W/2,H/2,H*.85);
   const vigA=.35+tensionLevel*.2+chromAberr*.3;
@@ -1252,11 +920,8 @@ function drawPostFX(){
   vignette.addColorStop(1,`rgba(0,0,0,${vigA})`);
   X.fillStyle=vignette;X.fillRect(0,0,W,H);
   
-  // 4-edge lens distortion vignette (barrel distortion hint)
-  const edgeW=8;['top','bottom','left','right'].forEach(edge=>{let eg;if(edge==='top'){eg=X.createLinearGradient(0,0,0,edgeW);eg.addColorStop(0,'rgba(0,0,0,.12)');eg.addColorStop(1,'rgba(0,0,0,0)');X.fillStyle=eg;X.fillRect(0,0,W,edgeW)}else if(edge==='bottom'){eg=X.createLinearGradient(0,H-edgeW,0,H);eg.addColorStop(0,'rgba(0,0,0,0)');eg.addColorStop(1,'rgba(0,0,0,.12)');X.fillStyle=eg;X.fillRect(0,H-edgeW,W,edgeW)}else if(edge==='left'){eg=X.createLinearGradient(0,0,edgeW,0);eg.addColorStop(0,'rgba(0,0,0,.12)');eg.addColorStop(1,'rgba(0,0,0,0)');X.fillStyle=eg;X.fillRect(0,0,edgeW,H)}else{eg=X.createLinearGradient(W-edgeW,0,W,0);eg.addColorStop(0,'rgba(0,0,0,0)');eg.addColorStop(1,'rgba(0,0,0,.12)');X.fillStyle=eg;X.fillRect(W-edgeW,0,edgeW,H)}});
-  
   // Bloom score flash
-  if(bloomPulse>0&&!reducedMotion){
+  if(bloomPulse>0){
     const bloom=X.createRadialGradient(W/2,H/2,0,W/2,H/2,W);
     bloom.addColorStop(0,`rgba(255,220,100,${bloomPulse*.08})`);
     bloom.addColorStop(.3,`rgba(255,200,50,${bloomPulse*.04})`);
@@ -1268,7 +933,7 @@ function drawPostFX(){
   if(flashA>0){X.fillStyle=`rgba(255,255,255,${flashA})`;X.fillRect(0,0,W,H)}
   
   // Chromatic aberration on death
-  if(chromAberr>0&&!reducedMotion){
+  if(chromAberr>0){
     X.save();X.globalAlpha=chromAberr*.08;
     X.globalCompositeOperation='screen';
     X.fillStyle='rgba(255,0,0,.15)';X.fillRect(-3,0,W,H);
@@ -1276,11 +941,10 @@ function drawPostFX(){
     X.restore();
   }
   
-  // Subtle film grain overlay — count scaled to frame budget
-  if(state==='PLAYING'&&!reducedMotion){
-    const grainCount=particleBudget>40?50:25;
+  // Subtle film grain overlay
+  if(state==='PLAYING'){
     X.save();X.globalAlpha=.015;
-    for(let i=0;i<grainCount;i++){const gx=Math.random()*W,gy_=Math.random()*H;X.fillStyle=Math.random()>.5?'rgba(255,255,255,1)':'rgba(0,0,0,1)';X.fillRect(gx,gy_,1,1)}
+    for(let i=0;i<80;i++){const gx=Math.random()*W,gy_=Math.random()*H;const b=Math.random()>.5?'rgba(255,255,255,1)':'rgba(0,0,0,1)';X.fillStyle=b;X.fillRect(gx,gy_,1,1)}
     X.restore();
   }
 }
@@ -1306,15 +970,8 @@ function drawReady(){
   X.restore();
   X.fillStyle='rgba(255,255,255,.06)';X.beginPath();X.arc(W/2,292,pr,0,Math.PI*2);X.fill();
   X.fillStyle="#fff";X.font="16px sans-serif";X.textAlign="center";X.textBaseline="middle";X.fillText("👆",W/2,293);
-  // Best score trophy badge
   if(best>0){
-    const tX=W-46,tY=186,tr=20;
-    X.save();X.shadowColor='#ffd700';X.shadowBlur=12;
-    X.fillStyle='rgba(255,215,0,.15)';X.beginPath();X.arc(tX,tY,tr,0,Math.PI*2);X.fill();
-    X.strokeStyle='#ffd700';X.lineWidth=1.5;X.beginPath();X.arc(tX,tY,tr,0,Math.PI*2);X.stroke();
-    X.shadowBlur=0;X.font="13px sans-serif";X.textAlign='center';X.textBaseline='middle';X.fillText('🏆',tX,tY-3);
-    X.font=`700 8px ${FR}`;X.fillStyle='#ffd700';X.fillText(String(best),tX,tY+12);
-    X.restore();
+    X.font=`600 10px ${FR}`;X.fillStyle='rgba(255,190,60,.7)';X.fillText(`BEST: ${best}`,W/2,322);
     X.font=`400 7px ${FN}`;X.fillStyle='rgba(255,255,255,.25)';X.fillText(`${totalGames} games played`,W/2,336);
   }
   // Theme buttons
@@ -1324,30 +981,18 @@ function drawReady(){
     else{X.fillStyle='rgba(255,255,255,.04)';rr(bx,bY,bW,bH,9);X.fill()}
     X.font=`${sel?'600':'400'} 8px ${FN}`;X.textAlign='center';X.textBaseline='middle';X.fillStyle=sel?'#fff':'rgba(255,255,255,.38)';X.fillText(thN[i],bx+bW/2,bY+bH/2)
   }
-  // Colorblind mode toggle button (bottom-right)
-  const cbX=W-44,cbY=H-GND-34,cbW=38,cbH=18;
-  X.fillStyle='rgba(0,0,0,.35)';rr(cbX,cbY,cbW,cbH,8);X.fill();
-  X.strokeStyle='rgba(255,255,255,.1)';X.lineWidth=.5;rr(cbX,cbY,cbW,cbH,8);X.stroke();
-  const cbLabels=['👁 Norm','👁 Deut','👁 HC'];
-  X.font=`400 6px ${FN}`;X.textAlign='center';X.textBaseline='middle';X.fillStyle='rgba(255,255,255,.4)';
-  X.fillText(cbLabels[cbMode],cbX+cbW/2,cbY+cbH/2);
 }
 
 /* ═══ PREMIUM GAME OVER SCREEN ═══ */
 function drawGO(){
   X.fillStyle="rgba(0,0,0,.58)";X.fillRect(0,0,W,H);
-  const pX=28;const panelH=375;
-  // Slide-in animation: cubic ease-out over 350ms
-  const slideT=Math.min(1,goEntryT/350);const easedSlide=1-Math.pow(1-slideT,3);const pY=148+(1-easedSlide)*200;
-  const pW=W-56,pH=panelH;
+  const pX=28,pY=148,pW=W-56,pH=375;
   const pg=X.createLinearGradient(pX,pY,pX,pY+pH);
   pg.addColorStop(0,'rgba(14,10,28,.97)');pg.addColorStop(.5,'rgba(10,8,22,.98)');pg.addColorStop(1,'rgba(6,4,14,.99)');
   X.fillStyle=pg;rr(pX,pY,pW,pH,22);X.fill();
   X.strokeStyle='rgba(255,90,40,.18)';X.lineWidth=1.2;X.shadowColor='rgba(255,70,30,.12)';X.shadowBlur=14;rr(pX,pY,pW,pH,22);X.stroke();X.shadowBlur=0;
   // Inner top highlight
   X.fillStyle='rgba(255,255,255,.025)';rr(pX+1,pY+1,pW-2,pH*.25,20);X.fill();
-  // New best confetti (rendered above panel)
-  X.save();for(const c of newBestConfetti){const t=c.lf/c.ml;X.globalAlpha=t*.9;X.save();X.translate(c.x,c.y);X.rotate(c.rot);X.fillStyle=c.c;X.fillRect(-c.w/2,-c.h/2,c.w,c.h);X.restore()}X.restore();
   
   // GAME OVER text with 3D effect
   X.save();
@@ -1369,10 +1014,9 @@ function drawGO(){
   X.font=`500 7px ${FN}`;X.textAlign='center';X.fillStyle='rgba(255,255,255,.35)';
   X.fillText('SCORE',pX+pW/4,sbY+14);
   X.font=`800 28px ${FR}`;X.fillStyle='#fff';X.shadowColor='rgba(255,255,255,.2)';X.shadowBlur=8;
-  // Score count-up animation
-  const displayedScore=goEntryT>=350?goScoreDisplay:0;
-  X.fillStyle='rgba(0,0,0,.4)';X.fillText(String(displayedScore),pX+pW/4+1.5,sbY+44);
-  X.fillStyle='#fff';X.fillText(String(displayedScore),pX+pW/4,sbY+43);X.shadowBlur=0;
+  // Score number with shadow
+  X.fillStyle='rgba(0,0,0,.4)';X.fillText(String(score),pX+pW/4+1.5,sbY+44);
+  X.fillStyle='#fff';X.fillText(String(score),pX+pW/4,sbY+43);X.shadowBlur=0;
   
   X.font=`500 7px ${FN}`;X.fillStyle='rgba(255,255,255,.35)';
   X.fillText('BEST',pX+3*pW/4,sbY+14);
@@ -1383,21 +1027,18 @@ function drawGO(){
   X.fillText(String(best),pX+3*pW/4,sbY+43);X.shadowBlur=0;
   if(isNewBest){X.save();X.font=`600 6px ${FN}`;X.fillStyle='#ffd700';X.globalAlpha=.6+Math.sin(gT*5)*.3;X.fillText('★ NEW BEST ★',pX+3*pW/4,sbY+62);X.restore()}
   
-  // Medal with coin-flip spin animation
+  // Medal
   const mY=sbY+88;const med=getMedal(score);
   if(med){X.save();X.shadowColor=med.g;X.shadowBlur=20;
     // Medal base glow
     const mg=X.createRadialGradient(W/2,mY+14,5,W/2,mY+14,32);
     mg.addColorStop(0,med.c.replace(')',',0.3)').replace('rgb','rgba'));mg.addColorStop(1,'rgba(0,0,0,0)');
     X.fillStyle=mg;X.beginPath();X.arc(W/2,mY+14,32,0,Math.PI*2);X.fill();
-    // Coin flip: scaleX 1→0→1 over 600ms
-    const spinT=Math.min(1,medalSpinT/600);const spinX=Math.abs(Math.cos(spinT*Math.PI));
-    X.save();X.translate(W/2,mY+14);X.scale(spinX,1);X.translate(-W/2,-(mY+14));
+    // Medal circle
     X.fillStyle=med.c;X.beginPath();X.arc(W/2,mY+14,22,0,Math.PI*2);X.fill();
     X.fillStyle='rgba(0,0,0,.15)';X.beginPath();X.arc(W/2,mY+14,16,0,Math.PI*2);X.fill();
     X.strokeStyle='rgba(255,255,255,.12)';X.lineWidth=1.2;X.beginPath();X.arc(W/2,mY+14,20,-.7*Math.PI,-.2*Math.PI);X.stroke();
     X.font=`700 14px ${FR}`;X.textAlign='center';X.textBaseline='middle';X.fillStyle='#fff';X.fillText(med.l[0],W/2,mY+15);
-    X.restore();
     X.font=`600 7px ${FN}`;X.shadowBlur=0;X.fillStyle=med.c;X.fillText(med.l,W/2,mY+44);X.restore()
   }else{X.font=`400 9px ${FN}`;X.textAlign='center';X.fillStyle='rgba(255,255,255,.22)';X.fillText('Score 5+ for a medal!',W/2,mY+16)}
   
@@ -1414,56 +1055,32 @@ function drawGO(){
 }
 
 /* ═══ GAME FLOW ═══ */
-function restart(g){score=0;pipes.forEach(p=>p.a=false);parts.forEach(p=>p.a=false);floats.forEach(f=>f.a=false);pups.forEach(p=>p.a=false);trail.forEach(t=>t.a=false);wParts.length=0;featherParticles.length=0;impactRings.length=0;dsp=0;deathT=0;flashA=0;scoreSc=1;curSpd=ISPD;shOn=false;shTmr=0;pipeSPU=0;bgF=0;bgM=0;bgN=0;dayC=.17;bloomPulse=0;chromAberr=0;tensionLevel=0;scoreCombo=0;deathSlowMo=1;deathAngVel=0;deathTotalRot=0;scoreColorT=0;comboCount=0;comboBannerT=0;milestoneFlashT=0;newBestConfetti=[];pipeEntries.clear();airPuffParticles=[];stopAmbientHum();bird.reset(g);state="READY"}
-function startRun(g){state="PLAYING";dsp=0;if(g)bird.gt=GHST;bird.jump();totalGames++;Store.save();startAmbientHum()}
-function kill(){if(bird.dead||state!=="PLAYING"||shOn)return;bird.dead=true;state="DEAD";deathT=0;shkT=SHKD;if(!reducedMotion){chromAberr=1;deathSlowMo=0.15;deathAngVel=0;deathTotalRot=0}spDP();const newBest=score>best;saveBest();if(newBest&&score>0)spawnNewBestConfetti();AU.play('death');haptic('death');goEntryT=0;goScoreCountT=0;goScoreDisplay=0;medalSpinT=0}
-function spawnNewBestConfetti(){newBestConfetti=[];const cs=['#ffd700','#fff','#ff9900','#ffcc00','#ffe066'];for(let i=0;i<38;i++)newBestConfetti.push({x:W/2+(Math.random()-.5)*80,y:148,vx:(Math.random()-.5)*3.5,vy:-2-Math.random()*4,ay:.18,rot:Math.random()*Math.PI*2,rv:(Math.random()-.5)*.12,w:4+Math.random()*5,h:3+Math.random()*4,c:cs[i%5],lf:1800+Math.random()*600,ml:2400})}
+function restart(g){score=0;pipes.forEach(p=>p.a=false);parts.forEach(p=>p.a=false);floats.forEach(f=>f.a=false);pups.forEach(p=>p.a=false);trail.forEach(t=>t.a=false);wParts.length=0;featherParticles.length=0;impactRings.length=0;dsp=0;deathT=0;flashA=0;scoreSc=1;curSpd=ISPD;shOn=false;shTmr=0;pipeSPU=0;bgF=0;bgM=0;bgN=0;dayC=.17;bloomPulse=0;chromAberr=0;tensionLevel=0;scoreCombo=0;bird.reset(g);state="READY"}
+function startRun(g){state="PLAYING";dsp=0;if(g)bird.gt=GHST;bird.jump();totalGames++;Store.save()}
+function kill(){if(bird.dead||state!=="PLAYING"||shOn)return;bird.dead=true;state="DEAD";deathT=0;shkT=SHKD;chromAberr=1;spDP();saveBest();AU.play('death');haptic('death')}
 
 /* ═══ INPUT ═══ */
 function handleInput(e){AU.init();if(state==="READY"){if(e&&e.type==='pointerdown'){const r=C.getBoundingClientRect(),sx=W/r.width,sy=H/r.height,mx=(e.clientX-r.left)*sx,my=(e.clientY-r.top)*sy;const bY=348,bW=80,bH=26,gp=5,totW=4*bW+3*gp,stX=W/2-totW/2;for(let i=0;i<4;i++){const bx=stX+i*(bW+gp);if(mx>=bx&&mx<=bx+bW&&my>=bY&&my<=bY+bH){ti=i;theme=TH[i];AU.play('tog');Store.save();return}}}startRun(false)}else if(state==="PLAYING"&&!shOn)bird.jump();else if(state==="GAMEOVER"){restart(true);startRun(true)}}
 document.addEventListener("keydown",e=>{if(e.key===" "||e.key==="ArrowUp"){e.preventDefault();handleInput(null)}});
-C.addEventListener("pointerdown",e=>{
-  e.preventDefault();
-  if(state==="READY"){
-    // Check colorblind button tap (bottom-right)
-    const r=C.getBoundingClientRect(),sx=W/r.width,sy=H/r.height;
-    const mx=(e.clientX-r.left)*sx,my=(e.clientY-r.top)*sy;
-    const cbX=W-44,cbY=H-GND-34,cbW=38,cbH=18;
-    if(mx>=cbX&&mx<=cbX+cbW&&my>=cbY&&my<=cbY+cbH){cbMode=(cbMode+1)%3;try{localStorage.setItem('cbm',String(cbMode))}catch(e2){}AU.play('tog');return}
-  }
-  handleInput(e);C.focus()
-},{passive:false});
+C.addEventListener("pointerdown",e=>{e.preventDefault();handleInput(e);C.focus()},{passive:false});
 
 /* ═══ UPDATE ═══ */
-function update(dt){
-  // Apply death slow-mo to game physics (not gT/background)
-  const physDt=state==="DEAD"?dt*deathSlowMo:dt;
-  const s=dt/16.667,br=BSZ/2-4,gy=H-GND-br;gT+=dt/1e3;
-  if(shkT>0&&!reducedMotion){shkT=Math.max(0,shkT-dt);const p=1-shkT/SHKD;const a=SHKI*Math.exp(-5*p);shkX=(Math.random()*2-1)*a;shkY=(Math.random()*2-1)*a}else{shkX=0;shkY=0;if(reducedMotion)shkT=0}
+function update(dt){const s=dt/16.667,br=BSZ/2-4,gy=H-GND-br;gT+=dt/1e3;
+  if(shkT>0){shkT=Math.max(0,shkT-dt);const p=1-shkT/SHKD;const a=SHKI*Math.exp(-5*p);shkX=(Math.random()*2-1)*a;shkY=(Math.random()*2-1)*a}else{shkX=0;shkY=0}
   const iS=state==="READY"?.3:0,pS=state==="PLAYING"?getSpeed():0,sB=iS+pS;
   bgF=(bgF+sB*.25*s)%(W*5);bgM=(bgM+sB*.55*s)%(W*5);bgN=(bgN+sB*1.0*s)%(W*5);
   if(state==="PLAYING"){dayC=(dayC+dt/9e4)%1;seasonCycle=(seasonCycle+dt/24e4)%1}
   bird.update(dt);updP(dt);updPU(dt);updSh(dt);updW(dt);
   scoreSc+=(1-scoreSc)*Math.min(1,.15*s);if(flashA>0)flashA=Math.max(0,flashA-dt/300);
-  // Window flicker (standard on/off - TV and office are handled in draw via time-based animation)
-  winFlickerT+=dt;if(winFlickerT>WIN_FLICKER_INTERVAL){winFlickerT=0;const li=Math.floor(Math.random()*(cityLayers.length-1))+1;const layer=cityLayers[li];if(layer){const bi=Math.floor(Math.random()*layer.buildings.length);const b=layer.buildings[bi];if(b&&b.lit.length>0){const wi=Math.floor(Math.random()*b.lit.length);b.lit[wi]=!b.lit[wi]}}}
-  if(state==="PLAYING"||state==="DEAD"){const base=ISPD+1.6*Math.min(1,score/40),extra=score>40?Math.log(score-39)*.3:0;const physS=physDt/16.667;curSpd+=(base+extra-curSpd)*.015*physS;const sp=getSpeed();if(state==="PLAYING"){dsp+=sp*physS;if(dsp>=PDIST){spawnPipe();dsp-=PDIST}}for(let p of pipes){if(!p.a)continue;p.x-=sp*physS;p.fl=Math.max(0,p.fl-physDt/220);if(state==="PLAYING"&&!p.sc&&p.x+PW<bird.x){p.sc=true;score++;scoreSc=1.4;flashA=.08;bloomPulse=1;scoreColorT=280;spSF();AU.play('score');haptic('score');
-    // Combo system
-    comboCount++;if(comboCount===5){comboBannerText='GREAT!';comboBannerT=1200}else if(comboCount===10){comboBannerText='AMAZING!';comboBannerT=1200}else if(comboCount>=15){comboBannerText='LEGENDARY!';comboBannerT=1200}
-    // Score milestones
-    if([10,25,50,100].includes(score)){AU.play('fanfare');haptic('milestone');milestoneFlashT=500;fireflies=[];embers=[];sparkleMotes=[]}
-    else if(score%10===0){AU.play('ms');haptic('milestone')}}if(p.x+PW<-30)p.a=false}if(state==="PLAYING"){if(!bird.isG()&&!shOn&&chkCol())kill();if(!bird.isG()&&!shOn){if(bird.y-br<=0)kill();if(bird.y>=gy){bird.y=gy;kill()}}}}
+  // Window flicker
+  winFlickerT+=dt;if(winFlickerT>WIN_FLICKER_INTERVAL){winFlickerT=0;const li=Math.floor(Math.random()*cityLayers.length);const layer=cityLayers[li];if(layer){const bi=Math.floor(Math.random()*layer.buildings.length);const b=layer.buildings[bi];if(b&&b.lit.length>0){const wi=Math.floor(Math.random()*b.lit.length);b.lit[wi]=!b.lit[wi]}}}
+  if(state==="PLAYING"){const base=ISPD+1.6*Math.min(1,score/40),extra=score>40?Math.log(score-39)*.3:0;curSpd+=(base+extra-curSpd)*.015*s;const sp=getSpeed();dsp+=sp*s;if(dsp>=PDIST){spawnPipe();dsp-=PDIST}for(let p of pipes){if(!p.a)continue;p.x-=sp*s;p.fl=Math.max(0,p.fl-dt/220);if(!p.sc&&p.x+PW<bird.x){p.sc=true;score++;scoreSc=1.4;flashA=.08;bloomPulse=1;spSF();AU.play('score');haptic('score');if(score%10===0){AU.play('ms');haptic('milestone')}}if(p.x+PW<-30)p.a=false}if(!bird.isG()&&!shOn&&chkCol())kill();if(!bird.isG()&&!shOn){if(bird.y-br<=0)kill();if(bird.y>=gy){bird.y=gy;kill()}}}
   if(state==="DEAD"){deathT+=dt;if(deathT>1e3)state="GAMEOVER"}
-  // Reduced motion overrides
-  if(reducedMotion){deathSlowMo=1;chromAberr=0}
 }
 
 /* ═══ DRAW ═══ */
 function draw(){
-  // Colorblind high contrast override
-  if(cbMode===2){X.fillStyle='#000000';X.fillRect(0,0,W,H)}
-  else{X.clearRect(0,0,W,H);}
-  X.save();X.translate(shkX,shkY);
+  X.clearRect(0,0,W,H);X.save();X.translate(shkX,shkY);
   if(theme==='space')drawBG_space();else if(theme==='ocean')drawBG_ocean();else if(theme==='ruins')drawBG_ruins();else drawBG_hills();
   for(const p of pipes)drawPipe(p);drPU();drawGr();
   drW();drP();bird.draw();
@@ -1471,11 +1088,9 @@ function draw(){
   drawHUD();
   if(state==="READY")drawReady();if(state==="GAMEOVER")drawGO();
   X.restore();
-  // Colorblind deuteranopia: shift green channel
-  if(cbMode===1){X.save();X.globalCompositeOperation='multiply';X.fillStyle='rgba(180,180,255,0.08)';X.fillRect(0,0,W,H);X.restore()}
 }
 
-function loop(ts){const rawDt=ts-lt||16.667;const dt=Math.min(rawDt,33.33);lt=ts;frameTimes.push(rawDt);if(frameTimes.length>5)frameTimes.shift();update(dt);draw();requestAnimationFrame(loop)}
+function loop(ts){const dt=Math.min(ts-lt||16.667,33.33);lt=ts;update(dt);draw();requestAnimationFrame(loop)}
 restart(false);requestAnimationFrame(t=>{lt=t;loop(t)});
 </script>
 </body>
