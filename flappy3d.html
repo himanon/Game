@@ -180,7 +180,7 @@ const THEME_META = {
 
 /* per-theme look config (expanded in later chunks) */
 const THEMES = {
-  hills: { hdr:'spruit_sunrise_1k.hdr', bg:0x9fd6ff, blur:0.16, fog:0xe2eccf, fogD:0.0105,
+  hills: { hdr:'spruit_sunrise_1k.hdr', bg:0x9fd6ff, blur:0.16, fog:0xdce8d6, fogD:0.0082,
            sun:0xffe7b0, sunI:2.8, sunPos:[ 9, 11, 5 ], amb:0xbcd0c0, ambI:0.55,
            pipe:{ color:0x8a8f7a, rough:0.92, metal:0.0, emissive:0x000000, emI:0 },
            accent:0xffe07a },
@@ -200,7 +200,7 @@ const THEMES = {
 
 /* rich per-theme look: sky gradient, sun, palettes for scenery */
 const LOOK = {
-  hills: { skyTop:0x3a82d8, skyMid:0x90c9ef, skyBot:0xfbe7c6, sun:0xffe6b0, sunPos:[0.62,0.40,-1], sunSize:0.052, sunGlow:0.62,
+  hills: { skyTop:0x3a82d8, skyMid:0x90c9ef, skyBot:0xfbe7c6, sun:0xffe6b0, sunPos:[0.62,0.40,-1], sunSize:0.045, sunGlow:0.40,
            cloud:0xfff4e2, hillCols:[0x5a8a3f,0x49793a,0x3c6a32,0x315a2a], grass:0x639638,
            treeTrunk:0x6b4b2e, treeLeaf:[0x4e8a36,0x3f7a2c,0x69a043], horizonHaze:0xfbe7c6, ground:0x547f37 },
   space: { skyTop:0x05030f, skyMid:0x0d0a26, skyBot:0x1a1340, sun:0x9fc6ff, sunPos:[0.5,0.34,-1], sunSize:0.03, sunGlow:0.25,
@@ -314,6 +314,12 @@ function loadGLB(path,key){
   return new Promise((res,rej)=> new GLTFLoader().load(CDN+'models/gltf/'+path,
     g=>{ assets.glb[key]=g; res(g); }, undefined, e=>rej(new Error('glb '+path))));
 }
+// local repo texture (relative URL, not the CDN) — used for the generated parallax layers
+function loadBG(name,key){
+  return new Promise((res,rej)=> new THREE.TextureLoader().load('assets/bg/'+name,
+    t=>{ t.colorSpace=THREE.SRGBColorSpace; t.wrapS=THREE.RepeatWrapping; t.wrapT=THREE.ClampToEdgeWrapping; assets.tex[key]=t; res(t); },
+    undefined, e=>rej(new Error('bg '+name))));
+}
 
 async function preload(){
   const hdrs = [...new Set(THEME_LIST.map(t=>THEMES[t].hdr))];
@@ -331,6 +337,8 @@ async function preload(){
     loadTex('textures/lensflare/lensflare3.png','flareghost'),
     loadTex('textures/terrain/grasslight-big.jpg','grass'),
     loadTex('textures/lava/cloud.png','cloud'),
+    loadBG('clouds.png','bgClouds'), loadBG('mountains.png','bgMountains'),
+    loadBG('hills.png','bgHills'), loadBG('treeline.png','bgTreeline'),
     loadTex('textures/waternormals.jpg','detailN', true)   // tileable detail normal map
   ];
   await track(jobs);
@@ -409,7 +417,7 @@ function rimEmissive(){
   const S = normalize(rimU.sunDir);
   const fres = pow(clamp(oneMinus(dot(N,V)),0,1), float(2.4));      // edge falloff
   const back = clamp(dot(N, S.negate()), 0, 1).add(0.25);          // stronger where sun is behind
-  return rimU.col.mul(fres).mul(back).mul(rimU.amt).mul(1.6);
+  return rimU.col.mul(fres).mul(back).mul(rimU.amt).mul(1.0);
 }
 /* leafy material: vertex colours + soft noise shade + golden rim backlight */
 function foliageMat(opts={}){
@@ -818,25 +826,36 @@ function addFlock(glb, count, opt){
     k.s.position.x-=k.spd*dt; if(k.s.position.x<opt.xMin) k.s.position.x=opt.xMax;
     k.s.position.y += Math.sin(t*0.6+k.ph)*k.bob*dt; } });
 }
+// painted parallax backdrop layer: a wide quad at depth z, fog-blended, scrolls via
+// texture.offset (parallax speed). bottomY aligns its base to the horizon/ground.
+function bgLayer(tex, z, worldH, bottomY, parallax, tint, always){
+  if(!tex) return;
+  const dist = camDist()-z;                                   // distance from camera
+  const visH = 2*dist*Math.tan(THREE.MathUtils.degToRad(camera.fov*0.5));
+  const aspect = tex.image ? tex.image.width/tex.image.height : 4;
+  const h = worldH, w = h*aspect;
+  const repeat = Math.max(2, Math.ceil((visH*camera.aspect*4)/w));   // tile enough to cover + scroll
+  const t = tex.clone(); t.needsUpdate=true; t.wrapS=THREE.RepeatWrapping; t.repeat.set(repeat,1);
+  const mat=new THREE.MeshBasicNodeMaterial({ map:t, transparent:true, depthWrite:false, fog:true, color:C(tint||0xffffff) });
+  const geo=new THREE.PlaneGeometry(w*repeat, h);
+  const m=new THREE.Mesh(geo,mat); m.position.set(0, bottomY+h/2, z); m.renderOrder=-500+Math.round(z);
+  themeRoot.add(m); trackDispose(geo,mat,t);
+  animators.push((dt,_t,moving)=>{ if(moving) t.offset.x += speed*parallax*dt; else if(always) t.offset.x += parallax*dt*3.0; });
+  return m;
+}
 function sceneryHills(L){
   const lowfx=caps.lowfx;
+  // painted parallax vistas (generated layers) behind the 3D meadow
+  bgLayer(assets.tex.bgMountains, -118, 34, W.groundY-4, 0.0016, 0xeaf0fa);
+  bgLayer(assets.tex.bgHills,     -88,  24, W.groundY-3, 0.0034, 0xf2f7ea);
+  bgLayer(assets.tex.bgTreeline,  -60,  15, W.groundY-2, 0.0070, 0xeef4e2);
   // contoured, normal-mapped grass terrain (replaces the flat plane for hills)
   buildHillsTerrain();
   // reflective lake nestled at the hill base
   buildLake();
-  // far hazed mountain ridgeline (aerial perspective) behind the hills
-  bands.push(new Band(gMountain(), stdMat({vertexColors:false, roughness:1, color:C(0x8fa6b8)}),
-    spread(9,-120,120,(it)=>{ it.y=W.groundY-rrange(0,3); it.z=rrange(-135,-105); it.s=rrange(16,30); it.sx=rrange(0.8,1.4); }),
-    { speedMul:0.025, minX:-120, maxX:120 }));
-  // snow caps on the peaks
-  bands.push(new Band(gMountain(), stdMat({roughness:0.9, color:C(0xeaf2f6)}),
-    spread(9,-120,120,(it)=>{ it.y=W.groundY+rrange(8,16); it.z=rrange(-134,-106); it.s=rrange(5,9); it.sx=rrange(0.8,1.4); }),
-    { speedMul:0.025, minX:-120, maxX:120 }));
-  // far rolling hills at the horizon (rim-lit)
-  bands.push(new Band(gHillDome(), foliageMat({roughness:1}),
-    spread(11,-90,90,(it)=>{ it.y=W.groundY-rrange(1.5,4.0); it.z=rrange(-98,-58); it.s=rrange(6,11); it.sx=rrange(1.6,2.6); it.color=L.hillCols[Math.floor(srand()*L.hillCols.length)]; }),
-    { speedMul:0.05, minX:-96, maxX:96 }));
-  // nearer hill band
+  // drifting painted cloud sheet high in the sky
+  bgLayer(assets.tex.bgClouds, -112, 30, W.groundY+13, 0.0011, 0xffffff, true);
+  // nearer hill band (transition from painted vistas to the 3D meadow)
   bands.push(new Band(gHillDome(), foliageMat({roughness:1}),
     spread(8,-64,64,(it)=>{ it.y=W.groundY-rrange(0.5,2.0); it.z=rrange(-50,-30); it.s=rrange(5,8); it.sx=rrange(1.8,2.8); it.color=L.hillCols[0]; }),
     { speedMul:0.12, minX:-66, maxX:66 }));
@@ -845,10 +864,10 @@ function sceneryHills(L){
     const sp=new THREE.Sprite(new THREE.SpriteNodeMaterial({ map:assets.tex.cloud, color:C(warm?0xfff0d6:0xffffff), transparent:true, opacity:rrange(0.5,0.82), depthWrite:false }));
     sp.position.set(rrange(-46,46), rrange(6.5,13.5), rrange(-64,-40)); sp.scale.set(rrange(16,32),rrange(9,16),1); themeRoot.add(sp); trackDispose(sp.material); }
   // a broad soft horizon haze band for atmosphere
-  { const hz=new THREE.Sprite(new THREE.SpriteNodeMaterial({ map:assets.tex.cloud, color:C(0xfbe7c6), transparent:true, opacity:0.3, depthWrite:false, blending:THREE.AdditiveBlending }));
+  { const hz=new THREE.Sprite(new THREE.SpriteNodeMaterial({ map:assets.tex.cloud, color:C(0xfbe7c6), transparent:true, opacity:0.15, depthWrite:false, blending:THREE.AdditiveBlending }));
     hz.position.set(0, W.groundY+4.5, -78); hz.scale.set(210,22,1); themeRoot.add(hz); trackDispose(hz.material); }
   // god-ray sun shafts fanning from the sun (upper-right)
-  for(let i=0;i<(lowfx?3:7);i++){ const m=new THREE.SpriteNodeMaterial({ map:assets.tex.flare, color:C(0xffe9b8), transparent:true, opacity:rrange(0.035,0.08), depthWrite:false, blending:THREE.AdditiveBlending });
+  for(let i=0;i<(lowfx?3:5);i++){ const m=new THREE.SpriteNodeMaterial({ map:assets.tex.flare, color:C(0xffe9b8), transparent:true, opacity:rrange(0.02,0.045), depthWrite:false, blending:THREE.AdditiveBlending });
     const sp=new THREE.Sprite(m); sp.position.set(rrange(8,22), rrange(4,12), rrange(-40,-22)); sp.scale.set(rrange(3,6), rrange(22,38), 1);
     sp.material.rotation = -0.5 + i*0.08; themeRoot.add(sp); trackDispose(m); }
   // distant stork flock crossing the sky
@@ -915,7 +934,7 @@ function sceneryHills(L){
   // fireflies / glowing pollen seeds (slow drifting twinkles)
   for(let i=0;i<(lowfx?10:22);i++){ const m=new THREE.SpriteNodeMaterial({ map:assets.tex.disc, color:C(0xfff1a8), transparent:true, opacity:0.0, depthWrite:false, blending:THREE.AdditiveBlending });
     const sp=new THREE.Sprite(m); const bx=rrange(-18,18), by=rrange(W.groundY+1.5,7), bz=rrange(-6,5); sp.position.set(bx,by,bz); sp.scale.setScalar(rrange(0.12,0.26)); themeRoot.add(sp); trackDispose(m);
-    const ph=rrange(0,6.28); animators.push((dt,t)=>{ sp.position.x=bx+Math.sin(t*0.4+ph)*2.2; sp.position.y=by+Math.sin(t*0.7+ph)*0.9; sp.material.opacity=clampf(0.25+Math.sin(t*2.4+ph)*0.5,0,0.8); }); }
+    const ph=rrange(0,6.28); animators.push((dt,t)=>{ sp.position.x=bx+Math.sin(t*0.4+ph)*2.2; sp.position.y=by+Math.sin(t*0.7+ph)*0.9; sp.material.opacity=clampf(0.15+Math.sin(t*2.4+ph)*0.35,0,0.5); }); }
   // dragonflies darting over the lake
   for(let i=0;i<(lowfx?2:4);i++){ const m=new THREE.SpriteNodeMaterial({ map:assets.tex.spark, color:C(0x6fe0d0), transparent:true, opacity:0.9, depthWrite:false });
     const sp=new THREE.Sprite(m); const bz=rrange(-30,-20), by=W.groundY+rrange(1,2.5); sp.scale.set(0.5,0.22,1); themeRoot.add(sp); trackDispose(m);
@@ -1027,11 +1046,11 @@ function applyTheme(name){
   ambLight.color.setHex(T.amb); ambLight.intensity=T.ambI; ambLight.groundColor.setHex(L.ground);
 
   // per-theme cinematic grade (hills = warm golden hour; others near-neutral)
-  const G = ({ hills:{warm:0.16,sat:1.12,vig:0.36,lift:0.02}, space:{warm:0.0,sat:1.06,vig:0.42,lift:0.0},
+  const G = ({ hills:{warm:0.10,sat:1.10,vig:0.36,lift:0.012}, space:{warm:0.0,sat:1.06,vig:0.42,lift:0.0},
                ocean:{warm:0.05,sat:1.1,vig:0.38,lift:0.01}, ruins:{warm:0.13,sat:1.08,vig:0.34,lift:0.015} })[name] || {warm:0.1,sat:1.08,vig:0.34,lift:0.01};
   gradeU.warm.value=G.warm; gradeU.sat.value=G.sat; gradeU.vignette.value=G.vig; gradeU.lift.value=G.lift;
   // feed the sun direction to foliage rim lighting
-  rimU.sunDir.value.copy(skyU.sunDir.value); rimU.col.value.setHex(L.sun); rimU.amt.value = (name==='hills'?1.0:0.0);
+  rimU.sunDir.value.copy(skyU.sunDir.value); rimU.col.value.setHex(L.sun); rimU.amt.value = (name==='hills'?0.7:0.0);
 
   if(ground){
     const gm=ground.userData.mat; gm.color.setHex(L.ground);
@@ -1052,13 +1071,13 @@ function applyTheme(name){
   // sun lens-flare glow sprite (not in space)
   if(name!=='space'){
     const sunPos=skyU.sunDir.value.clone().multiplyScalar(170);
-    const sm=new THREE.SpriteNodeMaterial({ map:assets.tex.flare, color:C(L.sun), transparent:true, opacity:0.85, depthWrite:false, blending:THREE.AdditiveBlending });
+    const sm=new THREE.SpriteNodeMaterial({ map:assets.tex.flare, color:C(L.sun), transparent:true, opacity:(name==='hills'?0.5:0.85), depthWrite:false, blending:THREE.AdditiveBlending });
     const sun=new THREE.Sprite(sm); sun.position.copy(sunPos);
-    sun.scale.setScalar(name==='ocean'?26:34); themeRoot.add(sun); trackDispose(sm);
+    sun.scale.setScalar(name==='ocean'?26:(name==='hills'?24:34)); themeRoot.add(sun); trackDispose(sm);
     // lens-flare ghosts marching from the sun toward screen centre (hills)
     if(name==='hills' && assets.tex.flareghost){
       [[0.55,7,0xffe7b0],[0.28,4,0xfff0c8],[-0.18,5,0xffd9a0],[-0.5,9,0xffe7b0]].forEach(([f,sc,col])=>{
-        const m=new THREE.SpriteNodeMaterial({ map:assets.tex.flareghost, color:C(col), transparent:true, opacity:0.28, depthWrite:false, blending:THREE.AdditiveBlending });
+        const m=new THREE.SpriteNodeMaterial({ map:assets.tex.flareghost, color:C(col), transparent:true, opacity:0.14, depthWrite:false, blending:THREE.AdditiveBlending });
         const s=new THREE.Sprite(m); s.position.copy(sunPos).multiplyScalar(f); s.position.z=-60; s.scale.setScalar(sc); themeRoot.add(s); trackDispose(m);
       });
     }
@@ -1068,7 +1087,7 @@ function updateScenery(dt, t, moving){
   const sp=speed;
   windGust = 1 + Math.sin(t*0.6)*0.45 + Math.sin(t*1.7+1.3)*0.2;   // coherent gusts
   for(const b of bands) b.update(dt, sp, t, moving);
-  for(const a of animators) a(dt, t);
+  for(const a of animators) a(dt, t, moving);
 }
 
 /* ---- FX particle burst (feathers / sparks on death + score) ---- */
@@ -1248,7 +1267,7 @@ function buildPost(){
     let cin = sp;
     try { const viewZ = sp.getViewZNode(); cin = dof(sp, viewZ, dofU.focus, dofU.range, dofU.bokeh); }
     catch(eDof){ logErr('dof', eDof.message); cin = sp; }
-    const b = bloom(cin, 0.62, 0.42, 0.85);
+    const b = bloom(cin, 0.62, 0.34, 0.90);
     post = new THREE.PostProcessing(renderer);
     const graded = Fn(()=>{
       let col = cin.add(b).rgb;

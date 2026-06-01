@@ -29,6 +29,7 @@ jobs:
           mkdir -p _site
           cp flappy3d.html _site/index.html
           cp flappy3d.html _site/flappy3d.html
+          cp -r assets _site/assets
 
       - name: Configure Pages
         uses: actions/configure-pages@v5
