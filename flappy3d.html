@@ -157,12 +157,12 @@ const W = {
   flap: 12.2,           // upward impulse (units/s)
   vMax: 24,             // terminal speed
   pipeW: 1.7,           // pipe half-extent visual radius
-  gap0: 6.4,            // starting vertical gap
-  gapMin: 4.2,
-  gapTighten: 0.06,     // per point
-  speed0: 7.2,          // scroll units/s
-  speedMax: 12.5,
-  spawnEvery: 4.0,      // world-x spacing between pipes
+  gap0: 5.9,            // starting vertical gap
+  gapMin: 3.9,
+  gapTighten: 0.05,     // per point
+  speed0: 7.0,          // scroll units/s
+  speedMax: 12.0,
+  spawnEvery: 9.2,      // world-x spacing between pipes (centre to centre)
   groundY: -10.5,
   ceilY: 11.5,
   colR: 0.62            // bird collision radius
@@ -198,13 +198,13 @@ const THEMES = {
 
 /* rich per-theme look: sky gradient, sun, palettes for scenery */
 const LOOK = {
-  hills: { skyTop:0x2f7ad6, skyMid:0x8ec7f2, skyBot:0xeaf6ff, sun:0xfff3d0, sunPos:[-0.42,0.30,-1], sunSize:0.045, sunGlow:0.5,
+  hills: { skyTop:0x2f7ad6, skyMid:0x8ec7f2, skyBot:0xeaf6ff, sun:0xfff3d0, sunPos:[0.5,0.42,-1], sunSize:0.045, sunGlow:0.45,
            cloud:0xffffff, hillCols:[0x4f7a3a,0x3f6b34,0x355c2c,0x294a23], grass:0x5b8a3c,
            treeTrunk:0x6b4b2e, treeLeaf:[0x4e8a36,0x3f7a2c,0x69a043], horizonHaze:0xdff0ff, ground:0x4e7a36 },
   space: { skyTop:0x05030f, skyMid:0x0d0a26, skyBot:0x1a1340, sun:0x9fc6ff, sunPos:[0.5,0.34,-1], sunSize:0.03, sunGlow:0.25,
            cloud:0x6a4bd0, hillCols:[0x141225,0x10101f], grass:0x161430,
            nebula:[0x6a2bd0,0xd02b8a,0x2b6ad0], planet:[0xc97a4a,0x6a8fd0,0xd0b46a], ground:0x121026 },
-  ocean: { skyTop:0x012c4a, skyMid:0x064b73, skyBot:0x0a86b0, sun:0xdfffff, sunPos:[-0.35,0.55,-1], sunSize:0.04, sunGlow:0.7,
+  ocean: { skyTop:0x012c4a, skyMid:0x064b73, skyBot:0x0a86b0, sun:0xdfffff, sunPos:[0.3,0.62,-1], sunSize:0.04, sunGlow:0.6,
            cloud:0x9fe7ff, hillCols:[0x07435f,0x063a52], grass:0x0a5c7a,
            coral:[0xff6f61,0xff9a3c,0xff4f8b,0xc04bff], seaweed:[0x2faa6a,0x3cc47e], fish:[0xffd34e,0xff7a3c,0x5ec8ff], ground:0x0c5066 },
   ruins: { skyTop:0x8fb0c9, skyMid:0xcdb487, skyBot:0xead7ad, sun:0xfff0cf, sunPos:[0.4,0.36,-1], sunSize:0.05, sunGlow:0.6,
@@ -742,6 +742,13 @@ function applyTheme(name){
   clearScenery();
   rebuildPipes(name);
   SCENERY[name] && SCENERY[name](L);
+
+  // sun lens-flare glow sprite (not in space)
+  if(name!=='space'){
+    const sm=new THREE.SpriteNodeMaterial({ map:assets.tex.flare, color:C(L.sun), transparent:true, opacity:0.85, depthWrite:false, blending:THREE.AdditiveBlending });
+    const sun=new THREE.Sprite(sm); sun.position.copy(skyU.sunDir.value).multiplyScalar(170);
+    sun.scale.setScalar(name==='ocean'?26:34); themeRoot.add(sun); trackDispose(sm);
+  }
 }
 function updateScenery(dt, t, moving){
   const sp=speed;
@@ -757,15 +764,36 @@ function burst(pos, colors, n=16, spread=3.2, up=2.5){
       transparent:true, depthWrite:false, blending:THREE.AdditiveBlending });
     const s=new THREE.Sprite(m); s.position.copy(pos);
     const a=Math.random()*6.28, v=Math.random()*spread+1.2;
-    s.userData={ vx:Math.cos(a)*v, vy:Math.sin(a)*v+up, vz:(Math.random()-0.5)*2, life:1, max:0.55+Math.random()*0.5, sc:0.5+Math.random()*0.7 };
+    s.userData={ vx:Math.cos(a)*v, vy:Math.sin(a)*v+up, vz:(Math.random()-0.5)*2, life:1, max:0.55+Math.random()*0.5, sc:0.5+Math.random()*0.7, g:14 };
     s.scale.setScalar(s.userData.sc); persistentRoot.add(s); fxParts.push(s);
+  }
+}
+/* pooled bird trail (no per-frame allocation) */
+const TRAIL_N=28; let trailPool=[], trailIdx=0;
+function initTrailPool(){
+  for(let i=0;i<TRAIL_N;i++){
+    const m=new THREE.SpriteNodeMaterial({ map:assets.tex.disc, transparent:true, opacity:0, depthWrite:false, blending:THREE.AdditiveBlending });
+    const s=new THREE.Sprite(m); s.visible=false; s.userData={life:0}; persistentRoot.add(s); trailPool.push(s);
+  }
+}
+function trail(pos, hex){
+  const s=trailPool[trailIdx]; trailIdx=(trailIdx+1)%TRAIL_N;
+  s.material.color.set(hex); s.position.set(pos.x-0.3, pos.y, pos.z-0.1);
+  s.userData={ life:1, max:0.42, sc:0.45+Math.random()*0.3, vx:-1.0, vy:(Math.random()-0.5)*0.5 };
+  s.visible=true;
+}
+function updateTrail(dt){
+  for(const s of trailPool){ const u=s.userData; if(u.life<=0){ if(s.visible) s.visible=false; continue; }
+    u.life-=dt/u.max; s.position.x+=u.vx*dt; s.position.y+=u.vy*dt;
+    s.material.opacity=Math.max(0,u.life)*0.5; s.scale.setScalar(u.sc*(0.35+u.life));
+    if(u.life<=0) s.visible=false;
   }
 }
 function updateFX(dt){
   for(let i=fxParts.length-1;i>=0;i--){ const s=fxParts[i], u=s.userData;
-    u.life-=dt/u.max; u.vy-=14*dt;
+    u.life-=dt/u.max; u.vy-=(u.g||0)*dt;
     s.position.x+=u.vx*dt; s.position.y+=u.vy*dt; s.position.z+=u.vz*dt;
-    s.material.opacity=Math.max(0,u.life); s.scale.setScalar(u.sc*(0.4+u.life));
+    s.material.opacity=Math.max(0,u.life)*(u.g?1:0.55); s.scale.setScalar(u.sc*(0.35+u.life));
     if(u.life<=0){ persistentRoot.remove(s); s.material.dispose(); fxParts.splice(i,1); }
   }
 }
@@ -830,8 +858,10 @@ function spawnPipe(){
   placePipe(p);
 }
 
+let trailT=0;
 function updatePlay(dt){
   speed = curSpeed();
+  trailT-=dt; if(trailT<=0 && bird.obj){ trailT=0.03; trail(bird.obj.position, THEMES[currentTheme].accent); }
   sinceSpawn += speed*dt;
   if(sinceSpawn >= W.spawnEvery){ sinceSpawn=0; spawnPipe(); }
   const leftBound = -halfWidth()-W.pipeW-3;
@@ -891,7 +921,7 @@ function buildPost(){
   if(caps.lowfx && !Q.fullfx) return;
   try {
     const sp = pass(scene, camera);
-    const b = bloom(sp, 0.62, 0.6, 0.8);
+    const b = bloom(sp, 0.5, 0.55, 0.85);
     post = new THREE.PostProcessing(renderer);
     post.outputNode = sp.add(b);
   } catch(e){ logErr('post', e.message, e.stack); post=null; }
@@ -919,6 +949,7 @@ function frame(){
   // scenery animates always (drift/idle) but only scrolls while playing or dying
   updateScenery(dt, _t, moving || state==='DEAD');
   updateFX(dt);
+  updateTrail(dt);
   applyShake();
 
   if(post) post.renderAsync();
@@ -974,6 +1005,7 @@ window.__game = {
     await preload();
     buildSky();
     buildBird();
+    initTrailPool();
     buildGround();
     applyTheme(currentTheme);
     buildPost();
