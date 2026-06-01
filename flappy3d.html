@@ -118,7 +118,7 @@ import { clone as skeletonClone } from 'three/addons/utils/SkeletonUtils.js';
 import {
   Fn, vec2, vec3, vec4, float, uniform, positionLocal, positionWorld, normalLocal, normalWorld,
   cameraPosition, time, mix, clamp, smoothstep, step, pow, sin, cos, abs, max, min, dot, normalize,
-  mx_noise_float, mx_fractal_noise_float, uv, length, fract, mul, add, sub, oneMinus, exp
+  mx_noise_float, mx_fractal_noise_float, uv, length, fract, mul, add, sub, oneMinus, exp, screenUV
 } from 'three/tsl';
 import { pass } from 'three/tsl';
 import { bloom } from 'three/addons/tsl/display/BloomNode.js';
@@ -299,9 +299,10 @@ function loadHDR(name){
     t=>{ t.mapping = THREE.EquirectangularReflectionMapping; assets.hdr[name]=t; res(t); },
     undefined, e=>rej(new Error('hdr '+name))));
 }
-function loadTex(path,key){
+function loadTex(path,key,linear){
   return new Promise((res,rej)=> new THREE.TextureLoader().load(CDN+path,
-    t=>{ t.colorSpace = THREE.SRGBColorSpace; assets.tex[key]=t; res(t); },
+    t=>{ t.colorSpace = linear?THREE.NoColorSpace:THREE.SRGBColorSpace;
+      if(linear){ t.wrapS=t.wrapT=THREE.RepeatWrapping; } assets.tex[key]=t; res(t); },
     undefined, e=>rej(new Error('tex '+path))));
 }
 function loadBird(){
@@ -327,7 +328,9 @@ async function preload(){
     loadTex('textures/opengameart/smoke1.png','smoke'),
     loadTex('textures/lensflare/lensflare0.png','flare'),
     loadTex('textures/lensflare/lensflare3.png','flareghost'),
-    loadTex('textures/terrain/grasslight-big.jpg','grass')
+    loadTex('textures/terrain/grasslight-big.jpg','grass'),
+    loadTex('textures/lava/cloud.png','cloud'),
+    loadTex('textures/waternormals.jpg','detailN', true)   // tileable detail normal map
   ];
   await track(jobs);
 }
@@ -396,6 +399,23 @@ const C = hex => new THREE.Color(hex);
 const cv = hex => { const c=C(hex); return vec3(c.r,c.g,c.b); };
 
 function stdMat(o={}){ return new THREE.MeshStandardNodeMaterial(Object.assign({ roughness:0.9, metalness:0.0 }, o)); }
+
+/* golden sun-side rim/backlight shared by foliage (set per-theme in applyTheme) */
+const rimU = { sunDir:uniform(new THREE.Vector3(0.62,0.4,-1).normalize()), col:uniform(C(0xffe6b0)), amt:uniform(0.0) };
+function rimEmissive(){
+  const N = normalize(normalWorld);
+  const V = normalize(cameraPosition.sub(positionWorld));
+  const S = normalize(rimU.sunDir);
+  const fres = pow(clamp(oneMinus(dot(N,V)),0,1), float(2.4));      // edge falloff
+  const back = clamp(dot(N, S.negate()), 0, 1).add(0.25);          // stronger where sun is behind
+  return rimU.col.mul(fres).mul(back).mul(rimU.amt).mul(1.6);
+}
+/* leafy material: vertex colours + soft noise shade + golden rim backlight */
+function foliageMat(opts={}){
+  const m = stdMat(Object.assign({ vertexColors:true, roughness:0.78 }, opts));
+  m.emissiveNode = rimEmissive();
+  return m;
+}
 
 /* faceted stone with TSL world-space noise mottling */
 function stoneMat(hex, rough=0.95, mossHex=null, mossAmt=0){
@@ -483,6 +503,42 @@ function gCloud(){ const parts=[]; const n=3+Math.floor(srand()*3);
   return mergeGeometries(parts,false);
 }
 function gHillDome(){ const g=new THREE.IcosahedronGeometry(1,1); g.scale(1.7,0.62,1.0); jitter(g,0.12); return g; }
+// a single tapered grass blade, root-dark -> tip-light vertex colours
+function gBlade(){
+  const g=new THREE.PlaneGeometry(0.2,1,1,3); g.translate(0,0.5,0);
+  const p=g.attributes.position, n=p.count, col=new Float32Array(n*3);
+  const root=C(0x2f5a26), tip=C(0x82bb50);
+  for(let i=0;i<n;i++){ const y=clampf(p.getY(i),0,1); p.setX(i,p.getX(i)*lerp(1,0.12,y)); p.setZ(i, Math.sin(y*1.6)*0.12);
+    col[i*3]=lerp(root.r,tip.r,y); col[i*3+1]=lerp(root.g,tip.g,y); col[i*3+2]=lerp(root.b,tip.b,y); }
+  p.needsUpdate=true; g.computeVertexNormals(); g.setAttribute('color',new THREE.BufferAttribute(col,3)); return g;
+}
+// jagged distant peak (cone + jitter) for the far ridgeline
+function gMountain(){ const g=new THREE.ConeGeometry(1,1.5,7,2); jitter(g,0.16); g.translate(0,0.55,0); return g; }
+// upward-only rolling height; ~0 in the play lane / foreground, grows toward the back
+function hillsHeight(wx,wz){
+  let h = Math.sin(wx*0.09)*1.0 + Math.sin(wz*0.07+1.3)*1.4 + Math.sin(wx*0.21+wz*0.13)*0.6;
+  h = (h+3)*0.45 + Math.sin(wx*0.6)*0.12 + Math.cos(wz*0.5)*0.12;
+  if(h<0) h=0;
+  const back = clampf((-wz-6)/40, 0, 1);
+  const lane = Math.exp(-Math.pow((wx+1.5)/7,2)) * Math.exp(-Math.pow((wz-2)/10,2));
+  return h * back * (1-0.85*lane) * 2.4;
+}
+function buildHillsTerrain(){
+  const sw=caps.lowfx?80:160, sd=caps.lowfx?60:120;
+  const geo=new THREE.PlaneGeometry(400,300,sw,sd);
+  const p=geo.attributes.position, n=p.count, col=new Float32Array(n*3);
+  const lo=C(0x3c6730), hi=C(0x74a64a);
+  for(let i=0;i<n;i++){ const wx=p.getX(i), wz=-p.getY(i); const h=hillsHeight(wx,wz);
+    p.setZ(i,h); const t=clampf(h/4,0,1);
+    col[i*3]=lerp(lo.r,hi.r,t); col[i*3+1]=lerp(lo.g,hi.g,t); col[i*3+2]=lerp(lo.b,hi.b,t); }
+  p.needsUpdate=true; geo.computeVertexNormals(); geo.setAttribute('color', new THREE.BufferAttribute(col,3));
+  const grass=assets.tex.grass.clone(); grass.wrapS=grass.wrapT=THREE.RepeatWrapping; grass.repeat.set(70,52); grass.needsUpdate=true;
+  const nrm=assets.tex.detailN.clone(); nrm.repeat.set(90,68); nrm.needsUpdate=true;
+  const mat=foliageMat({ roughness:0.96 });
+  mat.map=grass; mat.normalMap=nrm; mat.normalScale=new THREE.Vector2(0.6,0.6);
+  const mesh=new THREE.Mesh(geo,mat); mesh.rotation.x=-Math.PI/2; mesh.position.set(0,W.groundY,0); mesh.receiveShadow=true;
+  themeRoot.add(mesh); trackDispose(geo,mat,grass,nrm);
+}
 function gFish(){ const parts=[]; const b=new THREE.SphereGeometry(0.5,8,6); b.scale(1.5,0.8,0.5); parts.push(b);
   const t=new THREE.ConeGeometry(0.32,0.55,5); t.rotateZ(Math.PI/2); t.translate(-0.85,0,0); parts.push(t); return mergeGeometries(parts,false); }
 function gSeaweed(){ const parts=[]; let y=0; for(let i=0;i<5;i++){ const s=new THREE.BoxGeometry(0.22-i*0.03,0.5,0.05); s.translate(Math.sin(i)*0.12,y+0.25,0); parts.push(s); y+=0.45; } return mergeGeometries(parts,false); }
@@ -494,6 +550,7 @@ function gCoral(hex){ const parts=[]; const base=new THREE.SphereGeometry(0.4,7,
  *  5b. SCENERY FRAMEWORK (instanced + scrolling bands)
  * ============================================================ */
 let themeDisposables=[], bands=[], animators=[];
+let windGust=1;   // coherent gust multiplier for foliage sway (updated each frame)
 function trackDispose(...d){ d.forEach(x=>themeDisposables.push(x)); }
 function clearScenery(){
   bands=[]; animators=[];
@@ -518,7 +575,7 @@ class Band{
   write(t){
     const d=this._d;
     for(let i=0;i<this.items.length;i++){ const it=this.items[i];
-      const sway=this.sway?Math.sin(t*1.5+it.phase)*this.sway:0;
+      const sway=this.sway?Math.sin(t*1.5+it.phase)*this.sway*windGust:0;
       const bob=this.bob?Math.sin(t*0.9+it.phase)*this.bob:0;
       const swim=this.swim?Math.sin(t*0.7+it.phase)*this.swim:0;
       d.position.set(it.x, it.y+bob, it.z+swim);
@@ -550,7 +607,9 @@ let pipeMats = null;
 function makePipeMaterials(theme){
   if(pipeMats){ Object.values(pipeMats).forEach(m=>m&&m.dispose&&m.dispose()); }
   const L=LOOK[theme];
-  if(theme==='hills') pipeMats={ shaft:stoneMat(0xa39a86,0.95,0x4e7a36,0.5), cap:stoneMat(0x95907e,0.9,0x4e7a36,0.3), deco:stdMat({color:C(0x4e8a36),roughness:1}), flower:stdMat({vertexColors:true, roughness:0.6}), vine:stdMat({color:C(0x3f7a2c), roughness:0.85}) };
+  if(theme==='hills'){ pipeMats={ shaft:stoneMat(0xa39a86,0.95,0x4e7a36,0.5), cap:stoneMat(0x95907e,0.9,0x4e7a36,0.3), deco:stdMat({color:C(0x4e8a36),roughness:1}), flower:stdMat({vertexColors:true, roughness:0.6}), vine:stdMat({color:C(0x3f7a2c), roughness:0.85}) };
+    if(assets.tex.detailN){ const nrm=assets.tex.detailN.clone(); nrm.repeat.set(3,5); nrm.needsUpdate=true; const ns=new THREE.Vector2(0.5,0.5);
+      pipeMats.shaft.normalMap=nrm; pipeMats.shaft.normalScale=ns; pipeMats.cap.normalMap=nrm; pipeMats.cap.normalScale=ns; pipeMats._nrm=nrm; } }
   else if(theme==='space') pipeMats={ shaft:veinMat(0x4a4664,0x7a4bff), cap:metalMat(0x55506e,0.4), deco:emissiveMat(0xa07bff,0x1a1430,true) };
   else if(theme==='ocean') pipeMats={ shaft:stoneMat(0xc66a52,0.7,0xff8f5e,0.3), cap:stdMat({color:C(0xff9a5e),roughness:0.6}), deco:emissiveMat(0xff5f8b,0x3a1020,false) };
   else pipeMats={ shaft:stoneMat(0xc2ad84,0.96), cap:stoneMat(0xb39d72,0.94), deco:stdMat({color:C(0x5c8a3a),roughness:1}) };
@@ -708,47 +767,76 @@ function addFlock(glb, count, opt){
     k.s.position.y += Math.sin(t*0.6+k.ph)*k.bob*dt; } });
 }
 function sceneryHills(L){
-  // far rolling hills at the horizon (gentle, half-buried, slow parallax)
-  bands.push(new Band(gHillDome(), stdMat({roughness:1}),
+  const lowfx=caps.lowfx;
+  // contoured, normal-mapped grass terrain (replaces the flat plane for hills)
+  buildHillsTerrain();
+  // far hazed mountain ridgeline (aerial perspective) behind the hills
+  bands.push(new Band(gMountain(), stdMat({vertexColors:false, roughness:1, color:C(0x8fa6b8)}),
+    spread(9,-120,120,(it)=>{ it.y=W.groundY-rrange(0,3); it.z=rrange(-135,-105); it.s=rrange(16,30); it.sx=rrange(0.8,1.4); }),
+    { speedMul:0.025, minX:-120, maxX:120 }));
+  // snow caps on the peaks
+  bands.push(new Band(gMountain(), stdMat({roughness:0.9, color:C(0xeaf2f6)}),
+    spread(9,-120,120,(it)=>{ it.y=W.groundY+rrange(8,16); it.z=rrange(-134,-106); it.s=rrange(5,9); it.sx=rrange(0.8,1.4); }),
+    { speedMul:0.025, minX:-120, maxX:120 }));
+  // far rolling hills at the horizon (rim-lit)
+  bands.push(new Band(gHillDome(), foliageMat({roughness:1}),
     spread(11,-90,90,(it)=>{ it.y=W.groundY-rrange(1.5,4.0); it.z=rrange(-98,-58); it.s=rrange(6,11); it.sx=rrange(1.6,2.6); it.color=L.hillCols[Math.floor(srand()*L.hillCols.length)]; }),
     { speedMul:0.05, minX:-96, maxX:96 }));
-  // nearer hill band (a touch bigger, mid green)
-  bands.push(new Band(gHillDome(), stdMat({roughness:1}),
+  // nearer hill band
+  bands.push(new Band(gHillDome(), foliageMat({roughness:1}),
     spread(8,-64,64,(it)=>{ it.y=W.groundY-rrange(0.5,2.0); it.z=rrange(-50,-30); it.s=rrange(5,8); it.sx=rrange(1.8,2.8); it.color=L.hillCols[0]; }),
     { speedMul:0.12, minX:-66, maxX:66 }));
-  // soft volumetric cloud puffs (additive smoke sprites, high + far)
-  for(let i=0;i<6;i++){ const sp=new THREE.Sprite(new THREE.SpriteNodeMaterial({ map:assets.tex.smoke, color:C(0xffffff), transparent:true, opacity:rrange(0.22,0.4), depthWrite:false }));
-    sp.position.set(rrange(-44,44), rrange(6.5,13), rrange(-62,-42)); sp.scale.set(rrange(14,28),rrange(8,15),1); themeRoot.add(sp); trackDispose(sp.material); }
+  // soft warm cloud billboards (sun-lit), big + far
+  for(let i=0;i<(lowfx?5:8);i++){ const warm = i%2===0;
+    const sp=new THREE.Sprite(new THREE.SpriteNodeMaterial({ map:assets.tex.cloud, color:C(warm?0xfff0d6:0xffffff), transparent:true, opacity:rrange(0.5,0.82), depthWrite:false }));
+    sp.position.set(rrange(-46,46), rrange(6.5,13.5), rrange(-64,-40)); sp.scale.set(rrange(16,32),rrange(9,16),1); themeRoot.add(sp); trackDispose(sp.material); }
+  // a broad soft horizon haze band for atmosphere
+  { const hz=new THREE.Sprite(new THREE.SpriteNodeMaterial({ map:assets.tex.cloud, color:C(0xfbe7c6), transparent:true, opacity:0.3, depthWrite:false, blending:THREE.AdditiveBlending }));
+    hz.position.set(0, W.groundY+4.5, -78); hz.scale.set(210,22,1); themeRoot.add(hz); trackDispose(hz.material); }
+  // god-ray sun shafts fanning from the sun (upper-right)
+  for(let i=0;i<(lowfx?3:7);i++){ const m=new THREE.SpriteNodeMaterial({ map:assets.tex.flare, color:C(0xffe9b8), transparent:true, opacity:rrange(0.035,0.08), depthWrite:false, blending:THREE.AdditiveBlending });
+    const sp=new THREE.Sprite(m); sp.position.set(rrange(8,22), rrange(4,12), rrange(-40,-22)); sp.scale.set(rrange(3,6), rrange(22,38), 1);
+    sp.material.rotation = -0.5 + i*0.08; themeRoot.add(sp); trackDispose(m); }
+  // distant stork flock crossing the sky
+  addFlock(assets.glb.stork, lowfx?3:4, { size:2.4, xMin:-40, xMax:40, yMin:5, yMax:14, zMin:-70, zMax:-40, spdMin:1.4, spdMax:2.8 });
   // crisp geo clouds (mid layer, drift)
   bands.push(new Band(gCloud(), stdMat({color:C(L.cloud), roughness:1, emissive:C(0xffe9c0), emissiveIntensity:0.1}),
-    spread(8,-50,50,(it)=>{ it.y=rrange(5,11); it.z=rrange(-55,-26); it.s=rrange(1.8,3.6); }),
+    spread(7,-50,50,(it)=>{ it.y=rrange(5,11); it.z=rrange(-55,-30); it.s=rrange(1.8,3.4); }),
     { speedMul:0.16, minX:-54, maxX:54, bob:0.1 }));
-  // distant stork flock crossing the sky
-  addFlock(assets.glb.stork, 4, { size:2.4, xMin:-40, xMax:40, yMin:5, yMax:14, zMin:-70, zMax:-40, spdMin:1.4, spdMax:2.8 });
-  // trees (mid-ground row along the hills)
-  bands.push(new Band(gTree(L.treeLeaf[Math.floor(srand()*L.treeLeaf.length)], L.treeTrunk), stdMat({vertexColors:true, roughness:0.95}),
-    spread(18,-34,34,(it)=>{ it.y=W.groundY-0.2; it.z=rrange(-20,-8); it.s=rrange(1.3,2.6); it.ry=rrange(0,6.28); }),
+  // trees (rim-lit), mid-ground row
+  bands.push(new Band(gTree(L.treeLeaf[Math.floor(srand()*L.treeLeaf.length)], L.treeTrunk), foliageMat({roughness:0.92}),
+    spread(lowfx?14:18,-34,34,(it)=>{ it.y=W.groundY-0.2; it.z=rrange(-20,-8); it.s=rrange(1.3,2.6); it.ry=rrange(0,6.28); }),
     { speedMul:0.5, minX:-38, maxX:38, sway:0.03, shadow:true }));
-  // real flower meadow (instanced Flower.glb) hugging the ground, foreground
+  // dense waving grass carpet (foreground lushness)
+  bands.push(new Band(gBlade(), foliageMat({roughness:0.85, side:THREE.DoubleSide}),
+    spread(lowfx?120:340,-24,24,(it)=>{ it.y=W.groundY; it.z=rrange(-4,6.5); it.s=rrange(0.6,1.4); it.sx=rrange(0.7,1.2); it.ry=rrange(0,6.28); }),
+    { speedMul:1.0, minX:-26, maxX:26, sway:0.10 }));
+  // real flower meadow (instanced Flower.glb), rim-lit
   if(assets.glb.flower){
     const fcols=[0xffffff,0xffe9a0,0xff9ab0,0xc59cff,0xffd34e,0xffffff,0xff7e7e];
-    bands.push(new Band(glbMergedGeo(assets.glb.flower, 1.0), stdMat({vertexColors:true, roughness:0.55}),
-      spread(40,-22,22,(it)=>{ it.y=W.groundY+0.02; it.z=rrange(-3,5); it.s=rrange(0.55,1.15); it.ry=rrange(0,6.28); it.color=fcols[Math.floor(srand()*fcols.length)]; }),
+    bands.push(new Band(glbMergedGeo(assets.glb.flower, 1.0), foliageMat({roughness:0.55}),
+      spread(lowfx?28:42,-22,22,(it)=>{ it.y=W.groundY+0.02; it.z=rrange(-3,5); it.s=rrange(0.55,1.15); it.ry=rrange(0,6.28); it.color=fcols[Math.floor(srand()*fcols.length)]; }),
       { speedMul:1.0, minX:-26, maxX:26, sway:0.07, shadow:true }));
   }
-  // low grass tufts behind/among the flowers for ground cover
-  bands.push(new Band(gTree(L.grass, L.grass), stdMat({vertexColors:true, roughness:1}),
-    spread(20,-20,20,(it)=>{ it.y=W.groundY-0.3; it.z=rrange(-2,4.5); it.s=rrange(0.3,0.6); it.ry=rrange(0,6.28); }),
-    { speedMul:1.0, minX:-24, maxX:24, sway:0.05 }));
-  // a few foreground boulders (earthy, small)
+  // a few foreground boulders
   bands.push(new Band(gRock(0x7a6f55), stdMat({roughness:1}),
     spread(6,-18,18,(it)=>{ it.y=W.groundY+rrange(0.0,0.35); it.z=rrange(0,4); it.s=rrange(0.5,1.1); it.color=0x837357; it.ry=rrange(0,6.28); }),
     { speedMul:1.0, minX:-22, maxX:22, shadow:true }));
-  // drifting pollen motes (warm additive sparkle)
-  const pollen=spread(34,-20,20,(it)=>{ it.y=rrange(W.groundY+1,8); it.z=rrange(-8,5); it.s=rrange(0.05,0.16); });
-  bands.push(new Band(new THREE.PlaneGeometry(1,1), new THREE.MeshBasicNodeMaterial({ map:assets.tex.circle, color:C(0xfff0b0), transparent:true, opacity:0.55, depthWrite:false, blending:THREE.AdditiveBlending, side:THREE.DoubleSide }),
-    pollen, { speedMul:0.5, minX:-24, maxX:24, bob:0.4 }));
-  animators.push((dt)=>{ for(const it of pollen){ it.y+=dt*0.35; if(it.y>9) it.y=W.groundY+1; } });
+  // fluttering butterflies (wing flap via scale.x), wandering the foreground
+  const flutter=[];
+  for(let i=0;i<(lowfx?3:6);i++){ const col=[0xff7e7e,0xffd34e,0xff9ab0,0x9ad0ff][i%4];
+    const m=new THREE.SpriteNodeMaterial({ map:assets.tex.spark, color:C(col), transparent:true, opacity:0.95, depthWrite:false });
+    const sp=new THREE.Sprite(m); sp.position.set(rrange(-16,16), rrange(W.groundY+1.5,6), rrange(-4,5)); sp.scale.setScalar(0.5);
+    themeRoot.add(sp); trackDispose(m); flutter.push({ sp, ph:rrange(0,6.28), sp2:rrange(0.6,1.1), ax:rrange(-8,8), ay:rrange(W.groundY+2,6) }); }
+  animators.push((dt,t)=>{ for(const f of flutter){ const fl=0.45+Math.abs(Math.sin(t*9+f.ph))*0.5;
+    f.sp.scale.set(0.55*fl,0.55,1); f.sp.position.x=f.ax+Math.sin(t*0.5+f.ph)*6; f.sp.position.y=f.ay+Math.sin(t*1.3+f.ph)*1.2; } });
+  // drifting petals on the wind (warm additive)
+  const petals=spread(lowfx?22:38,-20,20,(it)=>{ it.y=rrange(W.groundY+1,9); it.z=rrange(-8,5); it.s=rrange(0.08,0.2); it.col=[0xfff0b0,0xff9ab0,0xffffff,0xffd34e][Math.floor(srand()*4)]; });
+  const pm=new THREE.MeshBasicNodeMaterial({ map:assets.tex.circle, color:C(0xffffff), transparent:true, opacity:0.6, depthWrite:false, blending:THREE.AdditiveBlending, side:THREE.DoubleSide });
+  const pBand=new Band(new THREE.PlaneGeometry(1,1), pm, petals, { speedMul:0.5, minX:-24, maxX:24, bob:0.5 });
+  petals.forEach((it,i)=>pBand.mesh.setColorAt(i, C(it.col)));
+  bands.push(pBand);
+  animators.push((dt)=>{ for(const it of petals){ it.y+=dt*0.4; it.z+=dt*0.1; if(it.y>10){ it.y=W.groundY+1; } } });
 }
 function scenerySpace(L){
   // starfield (two layers: dense small + sparse bright)
@@ -850,14 +938,18 @@ function applyTheme(name){
   dirLight.position.set(L.sunPos[0]*12, Math.abs(L.sunPos[1])*12+6, 8); dirLight.target.position.set(0,0,0);
   ambLight.color.setHex(T.amb); ambLight.intensity=T.ambI; ambLight.groundColor.setHex(L.ground);
 
+  // per-theme cinematic grade (hills = warm golden hour; others near-neutral)
+  const G = ({ hills:{warm:0.16,sat:1.12,vig:0.36,lift:0.02}, space:{warm:0.0,sat:1.06,vig:0.42,lift:0.0},
+               ocean:{warm:0.05,sat:1.1,vig:0.38,lift:0.01}, ruins:{warm:0.13,sat:1.08,vig:0.34,lift:0.015} })[name] || {warm:0.1,sat:1.08,vig:0.34,lift:0.01};
+  gradeU.warm.value=G.warm; gradeU.sat.value=G.sat; gradeU.vignette.value=G.vig; gradeU.lift.value=G.lift;
+  // feed the sun direction to foliage rim lighting
+  rimU.sunDir.value.copy(skyU.sunDir.value); rimU.col.value.setHex(L.sun); rimU.amt.value = (name==='hills'?1.0:0.0);
+
   if(ground){
     const gm=ground.userData.mat; gm.color.setHex(L.ground);
-    // hills gets a real grass diffuse texture; other themes stay flat-coloured
-    if(name==='hills' && assets.tex.grass){
-      const gt=assets.tex.grass; gt.wrapS=gt.wrapT=THREE.RepeatWrapping; gt.repeat.set(48,14);
-      gm.map=gt; gm.color.setHex(0xc3cf9e);
-    } else if(gm.map){ gm.map=null; }
-    gm.needsUpdate=true;
+    if(gm.map){ gm.map=null; gm.needsUpdate=true; }
+    // hills draws its own contoured grass terrain (built in sceneryHills); hide the flat plane
+    ground.visible = (name!=='hills');
   }
 
   // tint the bird's accent backlight to the theme
@@ -886,6 +978,7 @@ function applyTheme(name){
 }
 function updateScenery(dt, t, moving){
   const sp=speed;
+  windGust = 1 + Math.sin(t*0.6)*0.45 + Math.sin(t*1.7+1.3)*0.2;   // coherent gusts
   for(const b of bands) b.update(dt, sp, t, moving);
   for(const a of animators) a(dt, t);
 }
@@ -1052,14 +1145,34 @@ $('againBtn').addEventListener('pointerdown', e=>{ e.stopPropagation(); startRun
  *  9b. POST-PROCESSING (bloom; skipped under lowfx unless ?fullfx)
  * ============================================================ */
 let post=null;
+// cinematic grade controls (set per-theme in applyTheme)
+const gradeU = { warm:uniform(0.12), lift:uniform(0.015), contrast:uniform(1.08), vignette:uniform(0.34), grain:uniform(0.05), sat:uniform(1.08) };
 function buildPost(){
   post=null;
   if(caps.lowfx && !Q.fullfx) return;
   try {
     const sp = pass(scene, camera);
-    const b = bloom(sp, 0.5, 0.55, 0.85);
+    const b = bloom(sp, 0.62, 0.42, 0.85);
     post = new THREE.PostProcessing(renderer);
-    post.outputNode = sp.add(b);
+    const graded = Fn(()=>{
+      let col = sp.add(b).rgb;
+      // filmic-ish contrast around mid grey
+      col = col.sub(0.5).mul(gradeU.contrast).add(0.5).add(gradeU.lift);
+      // split-tone: warm the shadows, gently cool the highlights (golden hour)
+      const lum = dot(col, vec3(0.299,0.587,0.114));
+      const warmth = mix(vec3(1.06,0.99,0.86), vec3(0.97,0.99,1.04), clamp(lum,0,1));
+      col = mix(col, col.mul(warmth), gradeU.warm.mul(3.0));
+      // saturation
+      col = mix(vec3(lum), col, gradeU.sat);
+      // vignette
+      const d = screenUV.sub(0.5); const vig = oneMinus(dot(d,d).mul(gradeU.vignette.mul(2.2)));
+      col = col.mul(clamp(vig,0,1));
+      // animated film grain
+      const g = mx_noise_float(vec3(screenUV.mul(vec2(620.0,1100.0)), time.mul(24.0))).mul(gradeU.grain);
+      col = col.add(g);
+      return vec4(clamp(col,0,1.4), 1.0);
+    });
+    post.outputNode = graded();
   } catch(e){ logErr('post', e.message, e.stack); post=null; }
 }
 
