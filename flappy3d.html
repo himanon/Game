@@ -201,8 +201,8 @@ const THEMES = {
 /* rich per-theme look: sky gradient, sun, palettes for scenery */
 const LOOK = {
   hills: { skyTop:0x3a82d8, skyMid:0x90c9ef, skyBot:0xfbe7c6, sun:0xffe6b0, sunPos:[0.62,0.40,-1], sunSize:0.045, sunGlow:0.40,
-           cloud:0xfff4e2, hillCols:[0x5a8a3f,0x49793a,0x3c6a32,0x315a2a], grass:0x639638,
-           treeTrunk:0x6b4b2e, treeLeaf:[0x4e8a36,0x3f7a2c,0x69a043], horizonHaze:0xfbe7c6, ground:0x547f37 },
+           cloud:0xfff4e2, hillCols:[0x66a043,0x53913e,0x437a36,0x37672e], grass:0x6aa838,
+           treeTrunk:0x6b4b2e, treeLeaf:[0x5aa83d,0x47962f,0x77bd4a], horizonHaze:0xfbe7c6, ground:0x4f8a34 },
   space: { skyTop:0x05030f, skyMid:0x0d0a26, skyBot:0x1a1340, sun:0x9fc6ff, sunPos:[0.5,0.34,-1], sunSize:0.03, sunGlow:0.25,
            cloud:0x6a4bd0, hillCols:[0x141225,0x10101f], grass:0x161430,
            nebula:[0x6a2bd0,0xd02b8a,0x2b6ad0], planet:[0xc97a4a,0x6a8fd0,0xd0b46a], ground:0x121026 },
@@ -339,6 +339,8 @@ async function preload(){
     loadTex('textures/lava/cloud.png','cloud'),
     loadBG('clouds.png','bgClouds'), loadBG('mountains.png','bgMountains'),
     loadBG('hills.png','bgHills'), loadBG('treeline.png','bgTreeline'),
+    loadBG('balloon.png','balloon'), loadBG('birdv.png','birdv'),
+    loadBG('eagle.png','eagle'), loadBG('butterfly.png','butterfly'),
     loadTex('textures/waternormals.jpg','detailN', true)   // tileable detail normal map
   ];
   await track(jobs);
@@ -657,7 +659,9 @@ let pipeMats = null;
 function makePipeMaterials(theme){
   if(pipeMats){ Object.values(pipeMats).forEach(m=>m&&m.dispose&&m.dispose()); }
   const L=LOOK[theme];
-  if(theme==='hills'){ pipeMats={ shaft:stoneMat(0xa39a86,0.95,0x4e7a36,0.5), cap:stoneMat(0x95907e,0.9,0x4e7a36,0.3), deco:stdMat({color:C(0x4e8a36),roughness:1}), flower:stdMat({vertexColors:true, roughness:0.6}), vine:stdMat({color:C(0x3f7a2c), roughness:0.85}) };
+  if(theme==='hills'){ pipeMats={ shaft:stoneMat(0x9b9280,0.95,0x4e7a36,0.5), cap:stoneMat(0x8f8b78,0.9,0x4e7a36,0.3), deco:stdMat({color:C(0x4e8a36),roughness:1}), flower:stdMat({vertexColors:true, roughness:0.6}), vine:stdMat({color:C(0x3f7a2c), roughness:0.85}) };
+    // dampen HDR reflections on the stone so the pipes stop catching the golden hotspot/bloom
+    pipeMats.shaft.envMapIntensity=0.45; pipeMats.cap.envMapIntensity=0.45;
     if(assets.tex.detailN){ const nrm=assets.tex.detailN.clone(); nrm.repeat.set(3,5); nrm.needsUpdate=true; const ns=new THREE.Vector2(0.5,0.5);
       pipeMats.shaft.normalMap=nrm; pipeMats.shaft.normalScale=ns; pipeMats.cap.normalMap=nrm; pipeMats.cap.normalScale=ns; pipeMats._nrm=nrm; } }
   else if(theme==='space') pipeMats={ shaft:veinMat(0x4a4664,0x7a4bff), cap:metalMat(0x55506e,0.4), deco:emissiveMat(0xa07bff,0x1a1430,true) };
@@ -719,6 +723,10 @@ function makePipeSegment(theme, isTop){
 }
 
 let _pgeo={};
+// collision footprint of the current theme's pipe: body uses W.pipeW; the cap lip is
+// WIDER (half-width) and protrudes into the gap by half-height `h`, matched to the
+// rendered cap geometry so the broad top/bottom caps act as real obstacles.
+let pipeCap={ half:W.pipeW, h:0 };
 function buildPipePair(theme){
   const grp=new THREE.Group();
   const top=makePipeSegment(theme,true), bot=makePipeSegment(theme,false);
@@ -732,6 +740,10 @@ function rebuildPipes(theme){
   Object.values(_pgeo).forEach(g=>g&&g.dispose&&g.dispose());
   pipes=[];
   makePipeMaterials(theme);
+  // cap collision footprint (half-width, half-height of the lip), matched to pipeCapGeo
+  pipeCap = ({ hills:{half:W.pipeW*1.30, h:0.55}, space:{half:W.pipeW*1.28, h:0.50},
+               ocean:{half:W.pipeW*1.40, h:0.50}, ruins:{half:W.pipeW*1.25, h:0.45} })[theme]
+            || { half:W.pipeW*1.30, h:0.5 };
   _pgeo={ shaft:pipeShaftGeo(theme), cap:pipeCapGeo(theme) };
   if(theme==='hills'){
     if(assets.glb.flower) _pgeo.capFlower=glbMergedGeo(assets.glb.flower, 0.55);
@@ -836,12 +848,29 @@ function bgLayer(tex, z, worldH, bottomY, parallax, tint, always){
   const h = worldH, w = h*aspect;
   const repeat = Math.max(2, Math.ceil((visH*camera.aspect*4)/w));   // tile enough to cover + scroll
   const t = tex.clone(); t.needsUpdate=true; t.wrapS=THREE.RepeatWrapping; t.repeat.set(repeat,1);
-  const mat=new THREE.MeshBasicNodeMaterial({ map:t, transparent:true, depthWrite:false, fog:true, color:C(tint||0xffffff) });
+  const mat=new THREE.MeshBasicNodeMaterial({ map:t, transparent:true, alphaTest:0.04, depthWrite:false, fog:true, color:C(tint||0xffffff) });
   const geo=new THREE.PlaneGeometry(w*repeat, h);
   const m=new THREE.Mesh(geo,mat); m.position.set(0, bottomY+h/2, z); m.renderOrder=-500+Math.round(z);
   themeRoot.add(m); trackDispose(geo,mat,t);
   animators.push((dt,_t,moving)=>{ if(moving) t.offset.x += speed*parallax*dt; else if(always) t.offset.x += parallax*dt*3.0; });
   return m;
+}
+// small low-poly windmill landmark for the far hills; sails rotate slowly
+function buildWindmill(x,y,z,s){
+  const g=new THREE.Group(); g.position.set(x,y,z); g.scale.setScalar(s);
+  const tower=new THREE.Mesh(new THREE.CylinderGeometry(0.42,0.66,2.6,14), stdMat({color:C(0xeae0d0),roughness:1}));
+  tower.position.y=1.3; g.add(tower);
+  const roof=new THREE.Mesh(new THREE.ConeGeometry(0.82,0.9,16), stdMat({color:C(0xb5462f),roughness:0.9}));
+  roof.position.y=2.95; g.add(roof);
+  const sailMat=stdMat({color:C(0xf2efe6),roughness:0.8, side:THREE.DoubleSide});
+  const bladeGeo=new THREE.BoxGeometry(0.16,1.9,0.06);
+  const hub=new THREE.Mesh(new THREE.SphereGeometry(0.16,8,6), stdMat({color:C(0x5a4636)}));
+  const sails=new THREE.Group(); sails.position.set(0,2.5,0.62); sails.add(hub);
+  for(let i=0;i<4;i++){ const b=new THREE.Group(); const blade=new THREE.Mesh(bladeGeo, sailMat); blade.position.y=1.0; b.add(blade); b.rotation.z=i*Math.PI/2; sails.add(b); }
+  g.add(sails); themeRoot.add(g);
+  trackDispose(tower.geometry, tower.material, roof.geometry, roof.material, bladeGeo, sailMat, hub.geometry, hub.material);
+  animators.push((dt)=>{ sails.rotation.z += dt*0.5; });
+  return g;
 }
 function sceneryHills(L){
   const lowfx=caps.lowfx;
@@ -859,10 +888,9 @@ function sceneryHills(L){
   bands.push(new Band(gHillDome(), foliageMat({roughness:1}),
     spread(8,-64,64,(it)=>{ it.y=W.groundY-rrange(0.5,2.0); it.z=rrange(-50,-30); it.s=rrange(5,8); it.sx=rrange(1.8,2.8); it.color=L.hillCols[0]; }),
     { speedMul:0.12, minX:-66, maxX:66 }));
-  // soft warm cloud billboards (sun-lit), big + far
-  for(let i=0;i<(lowfx?5:8);i++){ const warm = i%2===0;
-    const sp=new THREE.Sprite(new THREE.SpriteNodeMaterial({ map:assets.tex.cloud, color:C(warm?0xfff0d6:0xffffff), transparent:true, opacity:rrange(0.5,0.82), depthWrite:false }));
-    sp.position.set(rrange(-46,46), rrange(6.5,13.5), rrange(-64,-40)); sp.scale.set(rrange(16,32),rrange(9,16),1); themeRoot.add(sp); trackDispose(sp.material); }
+  // (painted bgClouds sheet + sky-dome clouds now carry the sky; the old lava-cloud
+  //  billboards were removed — their black-background texture under normal blending
+  //  showed up as dark squares in the sky.)
   // a broad soft horizon haze band for atmosphere
   { const hz=new THREE.Sprite(new THREE.SpriteNodeMaterial({ map:assets.tex.cloud, color:C(0xfbe7c6), transparent:true, opacity:0.15, depthWrite:false, blending:THREE.AdditiveBlending }));
     hz.position.set(0, W.groundY+4.5, -78); hz.scale.set(210,22,1); themeRoot.add(hz); trackDispose(hz.material); }
@@ -872,15 +900,48 @@ function sceneryHills(L){
     sp.material.rotation = -0.5 + i*0.08; themeRoot.add(sp); trackDispose(m); }
   // distant stork flock crossing the sky
   addFlock(assets.glb.stork, lowfx?3:4, { size:2.4, xMin:-40, xMax:40, yMin:5, yMax:14, zMin:-70, zMax:-40, spdMin:1.4, spdMax:2.8 });
+
+  // ---- engaging 3D background elements (depth + life) ----
+  // hot-air balloons drifting high, slow parallax + gentle bob (far = smaller/hazier)
+  for(let i=0;i<(lowfx?2:3);i++){
+    const z=rrange(-90,-55), s=rrange(7,11)*(1+(z+55)/140);
+    const sp=new THREE.Sprite(new THREE.SpriteNodeMaterial({ map:assets.tex.balloon, transparent:true, depthWrite:false, opacity:0.96 }));
+    const y0=rrange(13,24), ph=srand()*6.28, spd=rrange(0.5,1.1), bob=rrange(0.3,0.7);
+    sp.position.set(rrange(-40,40), y0, z); sp.scale.set(s*0.78, s, 1);
+    themeRoot.add(sp); trackDispose(sp.material);
+    animators.push((dt,t)=>{ sp.position.x+=spd*dt; if(sp.position.x>46) sp.position.x=-46; sp.position.y=y0+Math.sin(t*0.5+ph)*bob; });
+  }
+  // bird flocks crossing the upper sky
+  for(let i=0;i<(lowfx?1:2);i++){
+    const z=rrange(-75,-55), s=rrange(5,8), y0=rrange(12,18), spd=rrange(1.6,2.6);
+    const sp=new THREE.Sprite(new THREE.SpriteNodeMaterial({ map:assets.tex.birdv, transparent:true, depthWrite:false, opacity:0.9 }));
+    sp.position.set(rrange(-40,40), y0, z); sp.scale.set(s, s*0.5, 1);
+    themeRoot.add(sp); trackDispose(sp.material);
+    animators.push((dt,t)=>{ sp.position.x-=spd*dt; if(sp.position.x<-46) sp.position.x=46; sp.position.y=y0+Math.sin(t*0.4-z)*0.6; });
+  }
+  // a lone eagle gliding on a slow arc
+  { const sp=new THREE.Sprite(new THREE.SpriteNodeMaterial({ map:assets.tex.eagle, transparent:true, depthWrite:false, opacity:0.92 }));
+    const s=rrange(7,9); sp.scale.set(s, s*0.62, 1); sp.position.set(0,15,-52);
+    themeRoot.add(sp); trackDispose(sp.material);
+    animators.push((dt,t)=>{ sp.position.x=Math.sin(t*0.18)*30; sp.position.y=14+Math.sin(t*0.5)*2.2; sp.material.rotation=Math.cos(t*0.18)*0.12; }); }
+  // butterflies fluttering in the mid meadow (off to the sides), wing-flap via scale.x
+  for(let i=0;i<(lowfx?2:4);i++){
+    const sp=new THREE.Sprite(new THREE.SpriteNodeMaterial({ map:assets.tex.butterfly, transparent:true, depthWrite:false, opacity:0.95 }));
+    const s=rrange(0.6,1.0), bx=(srand()>0.5?1:-1)*rrange(8,20), by=W.groundY+rrange(1.5,4.5), bz=rrange(-14,-6);
+    const ph=srand()*6.28, ax=rrange(2,4), ay=rrange(1,2.2), fl=rrange(7,11);
+    sp.position.set(bx,by,bz); sp.scale.set(s,s,1); themeRoot.add(sp); trackDispose(sp.material);
+    animators.push((dt,t)=>{ sp.position.x=bx+Math.sin(t*0.6+ph)*ax; sp.position.y=by+Math.sin(t*0.9+ph*1.7)*ay; sp.scale.x=s*(0.5+Math.abs(Math.sin(t*fl+ph))*0.6); }); }
+  // distant windmill landmark on the far hills (rotating sails)
+  buildWindmill(-12, W.groundY+0.8, -40, 2.6);
   // crisp geo clouds (mid layer, drift)
   bands.push(new Band(gCloud(), stdMat({color:C(L.cloud), roughness:1, emissive:C(0xffe9c0), emissiveIntensity:0.1}),
     spread(7,-50,50,(it)=>{ it.y=rrange(5,11); it.z=rrange(-55,-30); it.s=rrange(1.8,3.4); }),
     { speedMul:0.16, minX:-54, maxX:54, bob:0.1 }));
   // lush leafy trees (rim-lit), two species, mid-ground rows
-  bands.push(new Band(gTreeLeafy([0x4e8a36,0x3f7a2c,0x69a043], L.treeTrunk), foliageMat({roughness:0.9}),
+  bands.push(new Band(gTreeLeafy([0x5aa83d,0x47962f,0x77bd4a], L.treeTrunk), foliageMat({roughness:0.9}),
     spread(lowfx?10:14,-34,34,(it)=>{ it.y=W.groundY-0.2; it.z=rrange(-22,-10); it.s=rrange(1.6,3.0); it.ry=rrange(0,6.28); }),
     { speedMul:0.42, minX:-38, maxX:38, sway:0.028, shadow:true }));
-  bands.push(new Band(gTreeLeafy([0x8fb24a,0xa9c45e,0x6f9a39], 0x8a6a44), foliageMat({roughness:0.9}),
+  bands.push(new Band(gTreeLeafy([0x9ecb4e,0xb6d85f,0x79ad3c], 0x8a6a44), foliageMat({roughness:0.9}),
     spread(lowfx?6:9,-30,30,(it)=>{ it.y=W.groundY-0.2; it.z=rrange(-16,-8); it.s=rrange(1.3,2.2); it.ry=rrange(0,6.28); }),
     { speedMul:0.5, minX:-34, maxX:34, sway:0.034, shadow:true }));
   // reeds + lily pads around the lake
@@ -1046,8 +1107,8 @@ function applyTheme(name){
   ambLight.color.setHex(T.amb); ambLight.intensity=T.ambI; ambLight.groundColor.setHex(L.ground);
 
   // per-theme cinematic grade (hills = warm golden hour; others near-neutral)
-  const G = ({ hills:{warm:0.10,sat:1.10,vig:0.36,lift:0.012}, space:{warm:0.0,sat:1.06,vig:0.42,lift:0.0},
-               ocean:{warm:0.05,sat:1.1,vig:0.38,lift:0.01}, ruins:{warm:0.13,sat:1.08,vig:0.34,lift:0.015} })[name] || {warm:0.1,sat:1.08,vig:0.34,lift:0.01};
+  const G = ({ hills:{warm:0.10,sat:1.20,vig:0.36,lift:0.012}, space:{warm:0.0,sat:1.12,vig:0.42,lift:0.0},
+               ocean:{warm:0.05,sat:1.18,vig:0.38,lift:0.01}, ruins:{warm:0.13,sat:1.16,vig:0.34,lift:0.015} })[name] || {warm:0.1,sat:1.16,vig:0.34,lift:0.01};
   gradeU.warm.value=G.warm; gradeU.sat.value=G.sat; gradeU.vignette.value=G.vig; gradeU.lift.value=G.lift;
   // feed the sun direction to foliage rim lighting
   rimU.sunDir.value.copy(skyU.sunDir.value); rimU.col.value.setHex(L.sun); rimU.amt.value = (name==='hills'?0.7:0.0);
@@ -1213,11 +1274,21 @@ function updatePlay(dt){
   if(bird.y + W.colR > W.ceilY){ bird.y=W.ceilY-W.colR; bird.vy=0; }
   for(const p of pipes){
     if(!p.active) continue;
-    if(Math.abs(p.x - W.birdX) < W.pipeW + W.colR*0.8){
-      const topEdge = p.gapY + p.gap/2, botEdge = p.gapY - p.gap/2;
-      if(bird.y + W.colR > topEdge || bird.y - W.colR < botEdge){ die(); break; }
-    }
+    if(pipeHit(p, bird.y)){ die(); break; }
   }
+}
+// circle (bird radius) vs pipe = narrow body column + wider cap lip straddling each gap edge
+function pipeHit(p, by){
+  const colR=W.colR, bH=W.pipeW, cH=pipeCap.half, ch=pipeCap.h;
+  const dx=Math.abs(p.x - W.birdX);
+  if(dx > cH + colR) return false;                          // outside the widest part
+  const topEdge = p.gapY + p.gap/2, botEdge = p.gapY - p.gap/2;
+  if(dx < bH + colR){                                       // body column vs the gap opening
+    if(by + colR > topEdge || by - colR < botEdge) return true;
+  }
+  // wider cap lip: a band of half-height `ch` straddling each edge, out to the cap footprint
+  if(Math.abs(by - topEdge) < ch + colR || Math.abs(by - botEdge) < ch + colR) return true;
+  return false;
 }
 
 function pulseScore(){ scoreEl.style.transform='scale(1.18)'; setTimeout(()=>scoreEl.style.transform='scale(1)',110); }
@@ -1253,7 +1324,7 @@ $('againBtn').addEventListener('pointerdown', e=>{ e.stopPropagation(); startRun
  * ============================================================ */
 let post=null;
 // cinematic grade controls (set per-theme in applyTheme)
-const gradeU = { warm:uniform(0.12), lift:uniform(0.015), contrast:uniform(1.08), vignette:uniform(0.34), grain:uniform(0.05), sat:uniform(1.08) };
+const gradeU = { warm:uniform(0.12), lift:uniform(0.015), contrast:uniform(1.12), vignette:uniform(0.34), grain:uniform(0.05), sat:uniform(1.08) };
 // depth-of-field controls (focus = distance to the z~0 gameplay plane)
 const dofU = { focus:uniform(23.6), range:uniform(20.0), bokeh:uniform(2.1) };
 function buildPost(){
@@ -1339,6 +1410,9 @@ window.__game = {
   getState(){ return { state, score, best, theme:currentTheme, bird:{x:W.birdX,y:+bird.y.toFixed(2),vy:+bird.vy.toFixed(2)},
     pipes:pipes.filter(p=>p.active).map(p=>({x:+p.x.toFixed(2),gapY:+p.gapY.toFixed(2),gap:+p.gap.toFixed(2)})) }; },
   get score(){ return score; },
+  // collision probe for tests: does a bird at height `by` hit a pipe at (px,gapY,gap)?
+  hitTest(px, by, gapY, gap){ return pipeHit({ x:px, gapY, gap, active:true }, by); },
+  capInfo(){ return { half:pipeCap.half, h:pipeCap.h, bodyHalf:W.pipeW, colR:W.colR }; },
   setSeed(n){ setSeed(n); },
   frameInfo(){ return { backend: caps.isWebGPU?'webgpu':'webgl2', lowfx:caps.lowfx, fps:_fps,
     drawCalls: renderer.info.render.drawCalls, tris: renderer.info.render.triangles }; },
