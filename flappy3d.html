@@ -320,6 +320,11 @@ function loadBG(name,key){
     t=>{ t.colorSpace=THREE.SRGBColorSpace; t.wrapS=THREE.RepeatWrapping; t.wrapT=THREE.ClampToEdgeWrapping; assets.tex[key]=t; res(t); },
     undefined, e=>rej(new Error('bg '+name))));
 }
+// local repo glTF model (Quaternius Stylized Nature MegaKit, CC0) — relative URL
+function loadModel(name,key){
+  return new Promise((res,rej)=> new GLTFLoader().load('assets/models/nature/'+name+'.gltf',
+    g=>{ assets.glb[key]=g; res(g); }, undefined, e=>rej(new Error('model '+name))));
+}
 
 async function preload(){
   const hdrs = [...new Set(THEME_LIST.map(t=>THEMES[t].hdr))];
@@ -341,6 +346,12 @@ async function preload(){
     loadBG('hills.png','bgHills'), loadBG('treeline.png','bgTreeline'),
     loadBG('balloon.png','balloon'), loadBG('birdv.png','birdv'),
     loadBG('eagle.png','eagle'), loadBG('butterfly.png','butterfly'),
+    // real low-poly nature models (Quaternius MegaKit, CC0) for the hills meadow
+    loadModel('CommonTree_1','tree1'), loadModel('CommonTree_3','tree2'), loadModel('Pine_2','pine'),
+    loadModel('Bush_Common_Flowers','bush'), loadModel('Fern_1','fern'),
+    loadModel('Plant_1','plant1'), loadModel('Plant_1_Big','plant2'), loadModel('Mushroom_Common','mushroom'),
+    loadModel('Rock_Medium_1','rock1'), loadModel('Rock_Medium_2','rock2'),
+    loadModel('Pebble_Round_1','pebble1'), loadModel('Pebble_Round_3','pebble2'),
     loadTex('textures/waternormals.jpg','detailN', true)   // tileable detail normal map
   ];
   await track(jobs);
@@ -648,6 +659,59 @@ class Band{
 function spread(count, xMin, xMax, fn){
   const a=[]; for(let i=0;i<count;i++){ const it={ x:lerp(xMin,xMax,(i+srand()*0.6)/count), phase:rrange(0,6.28) }; fn(it,i); a.push(it); } return a;
 }
+/* flatten a loaded glTF into instanceable primitives that KEEP their textured materials
+   (unlike glbMergedGeo which bakes to vertex colours). Geometry is cloned + normalized to
+   targetSize with its base rested at y=0; the cached material is reused (do NOT dispose it). */
+function prepModelPrims(gltf, targetSize, opts={}){
+  gltf.scene.updateMatrixWorld(true);
+  const box=new THREE.Box3().setFromObject(gltf.scene), size=new THREE.Vector3(); box.getSize(size);
+  const s=(targetSize||1)/Math.max(size.x,size.y,size.z), minY=box.min.y;
+  const prims=[];
+  gltf.scene.traverse(m=>{ if(!m.isMesh||!m.geometry) return;
+    const g=m.geometry.clone(); g.applyMatrix4(m.matrixWorld); g.scale(s,s,s); g.translate(0,-minY*s,0);
+    const mat=Array.isArray(m.material)?m.material[0]:m.material;
+    if(opts.env!=null && 'envMapIntensity' in mat) mat.envMapIntensity=opts.env;
+    if(opts.rough!=null && 'roughness' in mat) mat.roughness=opts.rough;
+    prims.push({ geo:g, mat });
+  });
+  return prims;
+}
+/* like Band, but for a multi-primitive textured model: one InstancedMesh per primitive,
+   all sharing the same per-instance transforms (so the parts stay assembled). */
+class ModelBand{
+  constructor(prims, items, opts={}){
+    this.items=items;
+    this.speedMul=opts.speedMul!=null?opts.speedMul:1;
+    this.minX=opts.minX!=null?opts.minX:-30; this.maxX=opts.maxX!=null?opts.maxX:30;
+    this.sway=opts.sway||0; this.bob=opts.bob||0; this.spin=opts.spin||0;
+    this._d=new THREE.Object3D();
+    this.meshes=prims.map(p=>{ const im=new THREE.InstancedMesh(p.geo,p.mat,items.length);
+      im.frustumCulled=false; im.castShadow=!!opts.shadow; im.receiveShadow=!!opts.receive;
+      trackDispose(p.geo); themeRoot.add(im); return im; });   // geo cloned per band → safe to dispose; material is cached → not disposed
+    this.write(0);
+  }
+  write(t){ const d=this._d;
+    for(let i=0;i<this.items.length;i++){ const it=this.items[i];
+      const sway=this.sway?Math.sin(t*1.5+it.phase)*this.sway*windGust:0;
+      const bob=this.bob?Math.sin(t*0.9+it.phase)*this.bob:0;
+      d.position.set(it.x, it.y+bob, it.z);
+      d.rotation.set(it.rx||0,(it.ry||0)+(this.spin?t*this.spin:0),(it.rz||0)+sway);
+      d.scale.set(it.s*(it.sx||1), it.s, it.s); d.updateMatrix();
+      for(const im of this.meshes) im.setMatrixAt(i,d.matrix);
+    }
+    for(const im of this.meshes) im.instanceMatrix.needsUpdate=true;
+  }
+  update(dt,gspeed,t,moving){ let move=false;
+    if(moving&&this.speedMul){ const dx=gspeed*this.speedMul*dt; move=true;
+      for(const it of this.items){ it.x-=dx; if(it.x<this.minX) it.x+=(this.maxX-this.minX); } }
+    if(move||this.sway||this.bob||this.spin) this.write(t);
+  }
+}
+// convenience: push a model band built from an asset key
+function modelBand(key, targetSize, items, opts={}){
+  const g=assets.glb[key]; if(!g) return;
+  bands.push(new ModelBand(prepModelPrims(g, targetSize, opts), items, opts));
+}
 
 /* ============================================================ *
  *  6. THEMED PIPES
@@ -937,13 +1001,22 @@ function sceneryHills(L){
   bands.push(new Band(gCloud(), stdMat({color:C(L.cloud), roughness:1, emissive:C(0xffe9c0), emissiveIntensity:0.1}),
     spread(7,-50,50,(it)=>{ it.y=rrange(5,11); it.z=rrange(-55,-30); it.s=rrange(1.8,3.4); }),
     { speedMul:0.16, minX:-54, maxX:54, bob:0.1 }));
-  // lush leafy trees (rim-lit), two species, mid-ground rows
-  bands.push(new Band(gTreeLeafy([0x5aa83d,0x47962f,0x77bd4a], L.treeTrunk), foliageMat({roughness:0.9}),
-    spread(lowfx?10:14,-34,34,(it)=>{ it.y=W.groundY-0.2; it.z=rrange(-22,-10); it.s=rrange(1.6,3.0); it.ry=rrange(0,6.28); }),
-    { speedMul:0.42, minX:-38, maxX:38, sway:0.028, shadow:true }));
-  bands.push(new Band(gTreeLeafy([0x9ecb4e,0xb6d85f,0x79ad3c], 0x8a6a44), foliageMat({roughness:0.9}),
-    spread(lowfx?6:9,-30,30,(it)=>{ it.y=W.groundY-0.2; it.z=rrange(-16,-8); it.s=rrange(1.3,2.2); it.ry=rrange(0,6.28); }),
-    { speedMul:0.5, minX:-34, maxX:34, sway:0.034, shadow:true }));
+  // real low-poly trees (Quaternius MegaKit, CC0), three species, mid-ground rows
+  modelBand('tree1', 1, spread(lowfx?7:10,-34,34,(it)=>{ it.y=W.groundY-0.1; it.z=rrange(-22,-11); it.s=rrange(3.2,5.2); it.ry=rrange(0,6.28); }),
+    { speedMul:0.42, minX:-38, maxX:38, sway:0.020, shadow:true, env:0.7 });
+  modelBand('pine', 1, spread(lowfx?4:6,-32,32,(it)=>{ it.y=W.groundY-0.1; it.z=rrange(-20,-12); it.s=rrange(3.6,5.6); it.ry=rrange(0,6.28); }),
+    { speedMul:0.46, minX:-36, maxX:36, sway:0.016, shadow:true, env:0.7 });
+  modelBand('tree2', 1, spread(lowfx?5:8,-30,30,(it)=>{ it.y=W.groundY-0.1; it.z=rrange(-16,-8); it.s=rrange(2.6,4.2); it.ry=rrange(0,6.28); }),
+    { speedMul:0.5, minX:-34, maxX:34, sway:0.024, shadow:true, env:0.75 });
+  // leafy ground foliage (flowering bush, ferns, succulent plants)
+  modelBand('bush', 1, spread(lowfx?4:7,-24,24,(it)=>{ it.y=W.groundY-0.05; it.z=rrange(-14,-4); it.s=rrange(1.0,1.8); it.ry=rrange(0,6.28); }),
+    { speedMul:0.7, minX:-28, maxX:28, sway:0.03, shadow:true, env:0.7 });
+  modelBand('fern', 1, spread(lowfx?5:9,-22,22,(it)=>{ it.y=W.groundY+0.02; it.z=rrange(-6,5); it.s=rrange(0.5,1.0); it.ry=rrange(0,6.28); }),
+    { speedMul:1.0, minX:-26, maxX:26, sway:0.05, env:0.75 });
+  modelBand('plant1', 1, spread(lowfx?4:7,-20,20,(it)=>{ it.y=W.groundY+0.02; it.z=rrange(-4,5); it.s=rrange(0.5,0.9); it.ry=rrange(0,6.28); }),
+    { speedMul:1.0, minX:-24, maxX:24, sway:0.05, env:0.75 });
+  modelBand('plant2', 1, spread(lowfx?3:5,-20,20,(it)=>{ it.y=W.groundY+0.02; it.z=rrange(-3,5); it.s=rrange(0.7,1.1); it.ry=rrange(0,6.28); }),
+    { speedMul:1.0, minX:-24, maxX:24, sway:0.04, env:0.75 });
   // reeds + lily pads around the lake
   bands.push(new Band(gReed(), foliageMat({roughness:0.85}),
     spread(lowfx?10:18,-40,40,(it)=>{ it.y=W.groundY+0.1; it.z=rrange(-32,-20); it.s=rrange(1.2,2.4); it.ry=rrange(0,6.28); it.color=0x4f7a2e; }),
@@ -963,17 +1036,18 @@ function sceneryHills(L){
       spread(lowfx?28:42,-22,22,(it)=>{ it.y=W.groundY+0.02; it.z=rrange(-3,5); it.s=rrange(0.55,1.15); it.ry=rrange(0,6.28); it.color=fcols[Math.floor(srand()*fcols.length)]; }),
       { speedMul:1.0, minX:-26, maxX:26, sway:0.07, shadow:true }));
   }
-  // foreground boulders + mossy rock clusters
-  bands.push(new Band(gRock(0x7a6f55), stdMat({roughness:1}),
-    spread(6,-18,18,(it)=>{ it.y=W.groundY+rrange(0.0,0.35); it.z=rrange(0,4); it.s=rrange(0.5,1.1); it.color=0x837357; it.ry=rrange(0,6.28); }),
-    { speedMul:1.0, minX:-22, maxX:22, shadow:true }));
-  bands.push(new Band(gRockCluster(0x8a7e63), stoneMat(0x8a7e63,0.95,0x5f8a3a,0.4),
-    spread(lowfx?4:7,-20,20,(it)=>{ it.y=W.groundY+rrange(0,0.3); it.z=rrange(-6,3); it.s=rrange(0.7,1.6); it.ry=rrange(0,6.28); }),
-    { speedMul:0.9, minX:-24, maxX:24, shadow:true }));
-  // mushrooms + dandelion puffs scattered in the meadow
-  bands.push(new Band(gMushroom(0xd2473a), stdMat({vertexColors:true, roughness:0.7}),
-    spread(lowfx?8:14,-20,20,(it)=>{ it.y=W.groundY+0.02; it.z=rrange(-4,5); it.s=rrange(0.6,1.3); it.ry=rrange(0,6.28); }),
-    { speedMul:1.0, minX:-24, maxX:24 }));
+  // real rocks + pebbles (Quaternius MegaKit, CC0)
+  modelBand('rock1', 1, spread(lowfx?4:6,-18,18,(it)=>{ it.y=W.groundY+rrange(-0.1,0.2); it.z=rrange(-2,4); it.s=rrange(0.8,1.7); it.ry=rrange(0,6.28); }),
+    { speedMul:1.0, minX:-22, maxX:22, shadow:true, env:0.6 });
+  modelBand('rock2', 1, spread(lowfx?3:5,-20,20,(it)=>{ it.y=W.groundY+rrange(-0.1,0.2); it.z=rrange(-6,2); it.s=rrange(0.7,1.5); it.ry=rrange(0,6.28); }),
+    { speedMul:0.9, minX:-24, maxX:24, shadow:true, env:0.6 });
+  modelBand('pebble1', 1, spread(lowfx?5:9,-18,18,(it)=>{ it.y=W.groundY+0.02; it.z=rrange(-2,5); it.s=rrange(0.4,0.9); it.ry=rrange(0,6.28); }),
+    { speedMul:1.0, minX:-22, maxX:22, shadow:true, env:0.6 });
+  modelBand('pebble2', 1, spread(lowfx?3:6,-20,20,(it)=>{ it.y=W.groundY+0.02; it.z=rrange(-4,4); it.s=rrange(0.4,0.8); it.ry=rrange(0,6.28); }),
+    { speedMul:0.95, minX:-24, maxX:24, shadow:true, env:0.6 });
+  // real mushrooms (Quaternius) + dandelion puffs scattered in the meadow
+  modelBand('mushroom', 1, spread(lowfx?6:10,-20,20,(it)=>{ it.y=W.groundY+0.02; it.z=rrange(-4,5); it.s=rrange(0.4,0.85); it.ry=rrange(0,6.28); }),
+    { speedMul:1.0, minX:-24, maxX:24, shadow:true, env:0.6 });
   bands.push(new Band(gDandelion(), foliageMat({roughness:0.8}),
     spread(lowfx?10:18,-22,22,(it)=>{ it.y=W.groundY+0.02; it.z=rrange(-4,6); it.s=rrange(0.7,1.4); it.ry=rrange(0,6.28); it.color=0xf2f4ee; }),
     { speedMul:1.0, minX:-26, maxX:26, sway:0.08 }));
