@@ -11,13 +11,26 @@
   #c{ position:fixed; inset:0; width:100%; height:100%; display:block; touch-action:none; }
   #vig{ position:fixed; inset:0; pointer-events:none; z-index:5;
     background:radial-gradient(120% 95% at 50% 42%, rgba(0,0,0,0) 52%, rgba(0,0,0,.28) 88%, rgba(0,0,0,.5) 100%); }
+  /* dynamic vignette that tightens slowly with the score (juice) */
+  #vig2{ position:fixed; inset:0; pointer-events:none; z-index:5; opacity:0; transition:opacity .5s ease-out;
+    background:radial-gradient(108% 82% at 50% 45%, rgba(0,0,0,0) 38%, rgba(0,0,0,.45) 84%, rgba(0,0,0,.72) 100%); }
 
   /* HUD */
   #hud{ position:fixed; inset:0; pointer-events:none; user-select:none; }
   #score{ position:absolute; top:max(18px,env(safe-area-inset-top)); left:0; right:0; text-align:center;
     font-size:13vh; font-weight:800; line-height:1; letter-spacing:2px;
-    text-shadow:0 4px 22px rgba(0,0,0,.55), 0 1px 0 rgba(0,0,0,.4); opacity:0; transition:opacity .25s; }
+    text-shadow:0 4px 22px rgba(0,0,0,.55), 0 1px 0 rgba(0,0,0,.4); opacity:0;
+    transition:opacity .25s, transform .12s cubic-bezier(.34,1.56,.64,1); }
   #score.show{ opacity:1; }
+  #streak{ position:absolute; top:calc(max(18px,env(safe-area-inset-top)) + 15vh); left:0; right:0; text-align:center;
+    font-size:3.3vh; font-weight:800; letter-spacing:1px; color:var(--accent); opacity:0;
+    transition:opacity .25s, transform .2s cubic-bezier(.34,1.56,.64,1); text-shadow:0 2px 14px rgba(0,0,0,.6); }
+  #streak.show{ opacity:.95; }
+  .streakflash #vig2{ box-shadow:inset 0 0 140px 10px var(--accent); transition:box-shadow .2s; }
+  .iconbtn{ position:absolute; top:max(14px,env(safe-area-inset-top)); right:14px; pointer-events:auto; cursor:pointer;
+    width:42px; height:42px; border-radius:12px; border:1.5px solid rgba(255,255,255,.18); z-index:6;
+    background:rgba(16,20,30,.5); -webkit-backdrop-filter:blur(8px); backdrop-filter:blur(8px); color:#fff; font-size:19px; line-height:1; }
+  .iconbtn:hover{ background:rgba(40,46,60,.7); }
 
   .panel{ position:absolute; left:50%; top:50%; transform:translate(-50%,-50%);
     width:min(86vw,420px); pointer-events:auto; text-align:center; }
@@ -65,8 +78,11 @@
 <canvas id="c"></canvas>
 
 <div id="vig"></div>
+<div id="vig2"></div>
 <div id="hud">
+  <button id="muteBtn" class="iconbtn">🔊</button>
   <div id="score">0</div>
+  <div id="streak"></div>
   <div class="tip" id="tip">tap &nbsp;/&nbsp; space to flap</div>
 
   <div class="panel" id="readyPanel">
@@ -74,6 +90,8 @@
       <div class="title">FLAPPY&nbsp;3D</div>
       <div class="sub" id="readySub">choose a world</div>
       <div class="themes" id="themeRow"></div>
+      <div class="sub" style="margin:2px 0 0">difficulty</div>
+      <div class="themes" id="diffRow"></div>
       <button class="btn" id="playBtn">PLAY</button>
     </div>
   </div>
@@ -176,6 +194,22 @@ const THEME_META = {
   space: { ico:'🪐', label:'Space' },
   ocean: { ico:'🌊', label:'Ocean' },
   ruins: { ico:'🏛️', label:'Ruins' }
+};
+
+/* selectable difficulty: scales scroll speed, vertical gap, and pipe spacing.
+   `moderate` reproduces the original tuning exactly (no behaviour change at default). */
+const DIFF_LIST = ['easy','moderate','high','extreme'];
+const DIFF_META = {
+  easy:     { ico:'🍃', label:'Easy' },
+  moderate: { ico:'⚖️', label:'Moderate' },
+  high:     { ico:'🔥', label:'High' },
+  extreme:  { ico:'💀', label:'Extreme' }
+};
+const DIFFS = {
+  easy:     { speed0:5.5,  speedMax:9.5,  speedRate:0.05,  gap0:6.8, gapMin:5.0, gapTighten:0.035, spawnEvery:10.6, flap:11.8, gravity:-38 },
+  moderate: { speed0:7.0,  speedMax:12.0, speedRate:0.08,  gap0:5.9, gapMin:3.9, gapTighten:0.05,  spawnEvery:9.2,  flap:12.2, gravity:-42 },
+  high:     { speed0:8.5,  speedMax:14.0, speedRate:0.11,  gap0:5.3, gapMin:3.4, gapTighten:0.06,  spawnEvery:8.2,  flap:12.6, gravity:-46 },
+  extreme:  { speed0:10.0, speedMax:16.5, speedRate:0.14,  gap0:4.8, gapMin:3.0, gapTighten:0.075, spawnEvery:7.3,  flap:13.0, gravity:-50 }
 };
 
 /* per-theme look config (expanded in later chunks) */
@@ -364,10 +398,10 @@ const bird = {
   obj:null, mixer:null, action:null, glow:null, ts:1,
   y:0, vy:0, ang:0, alive:false, idle:0,
   reset(){ this.y=1.2; this.vy=0; this.ang=0; this.alive=true; this.ts=1; if(this.action) this.action.timeScale=1; if(this.obj){ this.obj.position.set(W.birdX,this.y,W.birdZ); this.obj.rotation.set(0,Math.PI*0.5,0); } },
-  flap(){ this.vy = W.flap; this.ts=2.6; if(this.action){ this.action.reset(); this.action.timeScale = this.ts; this.action.play(); } },
+  flap(){ this.vy = activeDiff().flap; this.ts=2.6; if(this.action){ this.action.reset(); this.action.timeScale = this.ts; this.action.play(); } },
   update(dt){
     if(this.alive){
-      this.vy += W.gravity*dt;
+      this.vy += activeDiff().gravity*dt;
       this.vy = clampf(this.vy, -W.vMax, W.vMax);
       this.y += this.vy*dt;
     }
@@ -387,8 +421,8 @@ const bird = {
     if(this.glow){
       this.glow.position.set(W.birdX-0.1, this.y+bobY, W.birdZ-0.6);
       const pulse = 0.85 + Math.sin(this.idle*3.0)*0.12;
-      this.glow.scale.setScalar(3.0*pulse);
-      this.glow.material.opacity = this.alive ? 0.22 : (resting ? 0.24 : 0.1);
+      this.glow.scale.setScalar(2.6*pulse);
+      this.glow.material.opacity = this.alive ? 0.15 : (resting ? 0.17 : 0.08);
     }
     if(this.mixer) this.mixer.update(dt);
   }
@@ -1181,11 +1215,12 @@ function applyTheme(name){
   ambLight.color.setHex(T.amb); ambLight.intensity=T.ambI; ambLight.groundColor.setHex(L.ground);
 
   // per-theme cinematic grade (hills = warm golden hour; others near-neutral)
-  const G = ({ hills:{warm:0.10,sat:1.20,vig:0.36,lift:0.012}, space:{warm:0.0,sat:1.12,vig:0.42,lift:0.0},
-               ocean:{warm:0.05,sat:1.18,vig:0.38,lift:0.01}, ruins:{warm:0.13,sat:1.16,vig:0.34,lift:0.015} })[name] || {warm:0.1,sat:1.16,vig:0.34,lift:0.01};
+  // punchier + less golden: lower warm tint, push saturation/vibrance up per theme
+  const G = ({ hills:{warm:0.05,sat:1.28,vig:0.36,lift:0.012}, space:{warm:0.0,sat:1.18,vig:0.42,lift:0.0},
+               ocean:{warm:0.03,sat:1.24,vig:0.38,lift:0.01}, ruins:{warm:0.07,sat:1.22,vig:0.34,lift:0.015} })[name] || {warm:0.05,sat:1.22,vig:0.34,lift:0.01};
   gradeU.warm.value=G.warm; gradeU.sat.value=G.sat; gradeU.vignette.value=G.vig; gradeU.lift.value=G.lift;
-  // feed the sun direction to foliage rim lighting
-  rimU.sunDir.value.copy(skyU.sunDir.value); rimU.col.value.setHex(L.sun); rimU.amt.value = (name==='hills'?0.7:0.0);
+  // feed the sun direction to foliage rim lighting (dialed back so the gold rim doesn't dominate)
+  rimU.sunDir.value.copy(skyU.sunDir.value); rimU.col.value.setHex(L.sun); rimU.amt.value = (name==='hills'?0.4:0.0);
 
   if(ground){
     const gm=ground.userData.mat; gm.color.setHex(L.ground);
@@ -1267,39 +1302,125 @@ function updateFX(dt){
   }
 }
 
+/* ---- WebAudio juice: synthesized SFX + a subtle arpeggio loop (zero asset payload) ---- */
+const audio = (()=>{
+  let ctx=null, master=null, musicGain=null, muted=false, musicTimer=null, mi=0;
+  try { if(localStorage.getItem('flappy3d_mute')==='1') muted=true; } catch(e){}
+  function ensure(){
+    if(ctx) return;
+    const AC=window.AudioContext||window.webkitAudioContext; if(!AC) return;
+    ctx=new AC();
+    master=ctx.createGain(); master.gain.value=muted?0:0.55; master.connect(ctx.destination);
+    musicGain=ctx.createGain(); musicGain.gain.value=0.10; musicGain.connect(master);
+  }
+  function resume(){ ensure(); if(ctx&&ctx.state==='suspended') ctx.resume(); }
+  function tone({freq=440,type='sine',dur=0.15,gain=0.3,slideTo=null,delay=0,dest=null}){
+    if(!ctx||muted) return; const t0=ctx.currentTime+delay;
+    const o=ctx.createOscillator(), g=ctx.createGain(); o.type=type; o.frequency.setValueAtTime(freq,t0);
+    if(slideTo) o.frequency.exponentialRampToValueAtTime(Math.max(1,slideTo),t0+dur);
+    g.gain.setValueAtTime(0.0001,t0); g.gain.exponentialRampToValueAtTime(gain,t0+0.012);
+    g.gain.exponentialRampToValueAtTime(0.0001,t0+dur);
+    o.connect(g).connect(dest||master); o.start(t0); o.stop(t0+dur+0.03);
+  }
+  function noise({dur=0.2,gain=0.4,lp=1200}){
+    if(!ctx||muted) return; const t0=ctx.currentTime, n=Math.floor(ctx.sampleRate*dur);
+    const buf=ctx.createBuffer(1,n,ctx.sampleRate), d=buf.getChannelData(0);
+    for(let i=0;i<n;i++) d[i]=(Math.random()*2-1)*(1-i/n);
+    const src=ctx.createBufferSource(); src.buffer=buf;
+    const f=ctx.createBiquadFilter(); f.type='lowpass'; f.frequency.value=lp;
+    const g=ctx.createGain(); g.gain.value=gain;
+    src.connect(f).connect(g).connect(master); src.start(t0);
+  }
+  const PENTA=[0,3,5,7,10,12];                                 // minor pentatonic, gentle ambient bed
+  function startMusic(){
+    if(musicTimer||muted) return;
+    musicTimer=setInterval(()=>{ if(!ctx||muted||state!=='PLAYING'||document.hidden) return;
+      const semi=PENTA[mi%PENTA.length]+(mi%12===0?12:0); mi++;
+      const f=220*Math.pow(2,semi/12);
+      tone({freq:f,type:'triangle',dur:0.5,gain:0.22,dest:musicGain});
+      if(mi%2===0) tone({freq:f/2,type:'sine',dur:0.7,gain:0.16,dest:musicGain});
+    }, 480);
+  }
+  function stopMusic(){ clearInterval(musicTimer); musicTimer=null; }
+  document.addEventListener('visibilitychange',()=>{ if(ctx){ if(document.hidden) ctx.suspend&&ctx.suspend(); else if(!muted) ctx.resume&&ctx.resume(); } });
+  return {
+    ensure, resume, startMusic, stopMusic,
+    flap(){ tone({freq:520,slideTo:760,type:'triangle',dur:0.12,gain:0.16}); noise({dur:0.09,gain:0.05,lp:1900}); },
+    score(st=0){ const base=660*Math.pow(2,Math.min(st,10)/12); tone({freq:base,slideTo:base*1.5,type:'sine',dur:0.16,gain:0.20}); },
+    crash(){ tone({freq:180,slideTo:55,type:'sawtooth',dur:0.45,gain:0.28}); noise({dur:0.4,gain:0.33,lp:680}); },
+    setMuted(m){ muted=m; if(master) master.gain.value=m?0:0.55; if(m) stopMusic(); else { resume(); startMusic(); }
+      try{ localStorage.setItem('flappy3d_mute', m?'1':'0'); }catch(e){} return muted; },
+    isMuted(){ return muted; }
+  };
+})();
+
+/* ---- speed lines: cheap additive streaks that intensify with scroll speed (gated by lowfx) ---- */
+const SL_N=14; let slPool=[];
+function initSpeedLines(){
+  if(caps.lowfx) return;
+  for(let i=0;i<SL_N;i++){
+    const m=new THREE.SpriteNodeMaterial({ map:assets.tex.spark, color:C(0xffffff), transparent:true, opacity:0, depthWrite:false, blending:THREE.AdditiveBlending });
+    const s=new THREE.Sprite(m); s.visible=false; s.scale.set(2.4,0.05,1); s.userData={x:0,v:0,op:0}; persistentRoot.add(s); slPool.push(s);
+  }
+}
+function updateSpeedLines(dt){
+  if(caps.lowfx||!slPool.length) return;
+  const d=activeDiff(), span=Math.max(0.001,d.speedMax-d.speed0);
+  const intensity=clampf((speed-d.speed0)/span,0,1);
+  const baseOp=(state==='PLAYING')?lerp(0.0,0.5,intensity):0;
+  const hw=halfWidth();
+  for(const s of slPool){ const u=s.userData;
+    if(!s.visible || u.x<-hw-3){
+      if(baseOp<=0.02){ s.visible=false; continue; }
+      u.x=hw+rrange(0,5); s.position.set(u.x, rrange(W.groundY+1.5,W.ceilY-1.5), rrange(-1,2.5));
+      u.v=speed*rrange(2.3,3.3); u.op=baseOp*rrange(0.5,1.0); s.visible=true;
+    }
+    u.x-=u.v*dt; s.position.x=u.x; s.material.opacity=u.op;
+  }
+}
+
 /* ============================================================ *
  *  8. GAME STATE MACHINE
  * ============================================================ */
 let state = 'READY';   // READY | PLAYING | DEAD | OVER
-let score = 0, best = 0, speed = W.speed0, sinceSpawn = 0, deadT = 0;
+let score = 0, best = 0, speed = W.speed0, sinceSpawn = 0, deadT = 0, streak = 0;
 let shake = 0, shakeMag = 0;
 try { best = parseInt(localStorage.getItem('flappy3d_best')||'0',10)||0; } catch(e){}
+
+// active difficulty (persisted); `activeDiff()` is the single source for speed/gap/spacing/feel
+let currentDifficulty = 'moderate';
+try { const d=localStorage.getItem('flappy3d_diff'); if(d && DIFFS[d]) currentDifficulty=d; } catch(e){}
+function activeDiff(){ return DIFFS[currentDifficulty] || DIFFS.moderate; }
 
 const $ = id => document.getElementById(id);
 const scoreEl=$('score'), readyPanel=$('readyPanel'), overPanel=$('overPanel'), tipEl=$('tip');
 
-function curGap(){ return Math.max(W.gapMin, W.gap0 - score*W.gapTighten); }
-function curSpeed(){ return Math.min(W.speedMax, W.speed0 + score*0.08); }
+function curGap(){   const d=activeDiff(); return Math.max(d.gapMin, d.gap0 - score*d.gapTighten); }
+function curSpeed(){ const d=activeDiff(); return Math.min(d.speedMax, d.speed0 + score*d.speedRate); }
 
 function resetRun(){
-  score=0; speed=W.speed0; sinceSpawn=999; deadT=0; shake=0;
+  score=0; streak=0; speed=activeDiff().speed0; sinceSpawn=999; deadT=0; shake=0;
   pipes.forEach(p=>{ p.active=false; p.scored=false; p.grp.visible=false; });
+  // clear any in-flight FX particles so a fresh run starts clean
+  for(let i=fxParts.length-1;i>=0;i--){ const s=fxParts[i]; persistentRoot.remove(s); s.material.dispose(); }
+  fxParts.length=0;
   bird.reset();
   scoreEl.textContent='0'; scoreEl.classList.remove('show');
+  setVignette(0); updateStreakUI();
 }
 
 function toReady(){
   state='READY'; resetRun();
   readyPanel.classList.remove('hide'); overPanel.classList.add('hide');
   tipEl.classList.remove('show');
-  syncThemeUI();
+  syncThemeUI(); syncDifficultyUI();
 }
 function startRun(){
   if(state==='PLAYING') return;
   state='PLAYING'; resetRun();
   readyPanel.classList.add('hide'); overPanel.classList.add('hide');
   scoreEl.classList.add('show'); tipEl.classList.add('show');
-  bird.flap();
+  bird.flap(); audio.resume(); audio.flap(); audio.startMusic();
   setTimeout(()=>tipEl.classList.remove('show'), 1400);
 }
 function die(){
@@ -1308,6 +1429,7 @@ function die(){
   // place (no tumble / fall). A light recoil shake + a feather burst sell it.
   state='DEAD'; bird.alive=false; bird.vy=0; deadT=0; shake=1; shakeMag=0.42;
   if(bird.obj) burst(bird.obj.position, [0xfff0c0,0xffd34e,0x6ee36e,0xff9a5e], 18, 3.0, 2.4);
+  audio.crash();
   if(score>best){ best=score; try{ localStorage.setItem('flappy3d_best', String(best)); }catch(e){} }
 }
 function toOver(){
@@ -1332,17 +1454,21 @@ function spawnPipe(){
 let trailT=0;
 function updatePlay(dt){
   speed = curSpeed();
-  trailT-=dt; if(trailT<=0 && bird.obj){ trailT=0.03; trail(bird.obj.position, THEMES[currentTheme].accent); }
+  // speed-scaled bird trail: denser the faster you fly (skip on software renderers)
+  if(!caps.lowfx){ const tfreq=lerp(0.045,0.018, clampf((speed-5)/11,0,1));
+    trailT-=dt; if(trailT<=0 && bird.obj){ trailT=tfreq; trail(bird.obj.position, THEMES[currentTheme].accent); } }
   sinceSpawn += speed*dt;
-  if(sinceSpawn >= W.spawnEvery){ sinceSpawn=0; spawnPipe(); }
+  if(sinceSpawn >= activeDiff().spawnEvery){ sinceSpawn=0; spawnPipe(); }
   const leftBound = -halfWidth()-W.pipeW-3;
   for(const p of pipes){
     if(!p.active) continue;
     p.x -= speed*dt;
     p.grp.position.x = p.x;
-    if(!p.scored && p.x < W.birdX){ p.scored=true; score++; scoreEl.textContent=score; pulseScore(); }
+    if(!p.scored && p.x < W.birdX){ p.scored=true; score++; streak++; scoreEl.textContent=score; onScore(); }
     if(p.x < leftBound){ p.active=false; p.grp.visible=false; }
   }
+  // vignette tightens slowly as the score climbs (juice, renderer-independent DOM overlay)
+  setVignette(Math.min(0.30, score*0.006));
   // collisions
   if(bird.y - W.colR < W.groundY+0.4){ bird.y=W.groundY+0.4+W.colR; die(); }
   if(bird.y + W.colR > W.ceilY){ bird.y=W.ceilY-W.colR; bird.vy=0; }
@@ -1365,14 +1491,34 @@ function pipeHit(p, by){
   return false;
 }
 
-function pulseScore(){ scoreEl.style.transform='scale(1.18)'; setTimeout(()=>scoreEl.style.transform='scale(1)',110); }
+function pulseScore(){ scoreEl.style.transform='scale(1.22)'; setTimeout(()=>scoreEl.style.transform='scale(1)',110); }
+
+// fires on every point: pop the number, ding (pitch rises with streak), a gentle kick + spark pop, streak UI
+function onScore(){
+  pulseScore();
+  audio.score(streak);
+  shake=Math.max(shake,0.45); shakeMag=Math.max(shakeMag,0.10);
+  if(bird.obj){ const acc=THEMES[currentTheme].accent;
+    burst(bird.obj.position, [0xfff0c0, acc, 0x9ef0a0], caps.lowfx?5:8, 2.2, 1.8); }
+  if(streak>0 && streak%5===0) flashStreak();
+  updateStreakUI();
+}
+function updateStreakUI(){ const e=$('streak'); if(!e) return;
+  if(streak>=3){ e.textContent='STREAK ×'+streak; e.classList.add('show'); } else { e.classList.remove('show'); e.textContent=''; } }
+function flashStreak(){ const e=$('streak'); if(!e) return;
+  e.style.transform='scale(1.32)'; document.documentElement.classList.add('streakflash');
+  setTimeout(()=>{ e.style.transform='scale(1)'; document.documentElement.classList.remove('streakflash'); }, 220); }
+// progressive vignette via the DOM #vig overlay (works with or without post)
+const vigEl=$('vig2'); let vigBase=0;
+function setVignette(extra){ if(vigEl) vigEl.style.opacity = (vigBase + (extra||0)).toFixed(3); }
 
 /* ============================================================ *
  *  9. INPUT
  * ============================================================ */
 function onFlap(){
+  audio.resume();                                            // first user gesture inits AudioContext
   if(state==='READY'){ startRun(); return; }
-  if(state==='PLAYING'){ bird.flap(); }
+  if(state==='PLAYING'){ bird.flap(); audio.flap(); }
   else if(state==='OVER'){ startRun(); }
 }
 addEventListener('keydown', e=>{ if(e.code==='Space'||e.code==='ArrowUp'){ e.preventDefault(); onFlap(); } });
@@ -1388,17 +1534,38 @@ function buildThemeUI(){
     row.appendChild(b);
   });
 }
-function syncThemeUI(){ document.querySelectorAll('.theme').forEach(b=>b.classList.toggle('sel', b.dataset.theme===currentTheme)); }
+function syncThemeUI(){ document.querySelectorAll('[data-theme]').forEach(b=>b.classList.toggle('sel', b.dataset.theme===currentTheme)); }
 function chooseTheme(t){ if(state!=='READY'&&state!=='OVER') return; applyTheme(t); syncThemeUI(); }
-$('playBtn').addEventListener('pointerdown', e=>{ e.stopPropagation(); startRun(); });
-$('againBtn').addEventListener('pointerdown', e=>{ e.stopPropagation(); startRun(); });
+
+// difficulty selector (mirrors the theme trio; only switchable when not in a live run)
+function buildDifficultyUI(){
+  const row=$('diffRow'); if(!row) return; row.innerHTML='';
+  DIFF_LIST.forEach(d=>{
+    const b=document.createElement('div'); b.className='theme'+(d===currentDifficulty?' sel':''); b.dataset.diff=d;
+    b.innerHTML='<span class="ico">'+DIFF_META[d].ico+'</span>'+DIFF_META[d].label;
+    b.addEventListener('pointerdown', ev=>{ ev.stopPropagation(); chooseDifficulty(d); });
+    row.appendChild(b);
+  });
+}
+function syncDifficultyUI(){ document.querySelectorAll('[data-diff]').forEach(b=>b.classList.toggle('sel', b.dataset.diff===currentDifficulty)); }
+function chooseDifficulty(d){
+  if(state==='PLAYING'||state==='DEAD') return;             // lock during a live run
+  if(!DIFFS[d]) return;
+  currentDifficulty=d; try{ localStorage.setItem('flappy3d_diff', d); }catch(e){}
+  syncDifficultyUI();
+}
+
+$('playBtn').addEventListener('pointerdown', e=>{ e.stopPropagation(); audio.resume(); startRun(); });
+$('againBtn').addEventListener('pointerdown', e=>{ e.stopPropagation(); audio.resume(); startRun(); });
+$('muteBtn').addEventListener('pointerdown', e=>{ e.stopPropagation(); audio.ensure();
+  const m=audio.setMuted(!audio.isMuted()); $('muteBtn').textContent = m?'🔇':'🔊'; });
 
 /* ============================================================ *
  *  9b. POST-PROCESSING (bloom; skipped under lowfx unless ?fullfx)
  * ============================================================ */
 let post=null;
 // cinematic grade controls (set per-theme in applyTheme)
-const gradeU = { warm:uniform(0.12), lift:uniform(0.015), contrast:uniform(1.12), vignette:uniform(0.34), grain:uniform(0.05), sat:uniform(1.08) };
+const gradeU = { warm:uniform(0.12), lift:uniform(0.015), contrast:uniform(1.16), vignette:uniform(0.34), grain:uniform(0.05), sat:uniform(1.08) };
 // depth-of-field controls (focus = distance to the z~0 gameplay plane)
 const dofU = { focus:uniform(23.6), range:uniform(20.0), bokeh:uniform(2.1) };
 function buildPost(){
@@ -1412,7 +1579,7 @@ function buildPost(){
     let cin = sp;
     try { const viewZ = sp.getViewZNode(); cin = dof(sp, viewZ, dofU.focus, dofU.range, dofU.bokeh); }
     catch(eDof){ logErr('dof', eDof.message); cin = sp; }
-    const b = bloom(cin, 0.62, 0.34, 0.90);
+    const b = bloom(cin, 0.70, 0.34, 0.90);
     post = new THREE.PostProcessing(renderer);
     const graded = Fn(()=>{
       let col = cin.add(b).rgb;
@@ -1420,8 +1587,8 @@ function buildPost(){
       col = col.sub(0.5).mul(gradeU.contrast).add(0.5).add(gradeU.lift);
       // split-tone: warm the shadows, gently cool the highlights (golden hour)
       const lum = dot(col, vec3(0.299,0.587,0.114));
-      const warmth = mix(vec3(1.06,0.99,0.86), vec3(0.97,0.99,1.04), clamp(lum,0,1));
-      col = mix(col, col.mul(warmth), gradeU.warm.mul(3.0));
+      const warmth = mix(vec3(1.03,1.0,0.93), vec3(0.97,0.99,1.04), clamp(lum,0,1));
+      col = mix(col, col.mul(warmth), gradeU.warm.mul(2.2));
       // saturation
       col = mix(vec3(lum), col, gradeU.sat);
       // vignette
@@ -1462,6 +1629,7 @@ function frame(){
   updateScenery(dt, _t, moving || state==='DEAD');
   updateFX(dt);
   updateTrail(dt);
+  updateSpeedLines(dt);
   applyShake();
 
   if(post) post.renderAsync();
@@ -1478,12 +1646,18 @@ window.__game = {
   ready: readyPromise,
   isWebGPU: ()=>caps.isWebGPU,
   async setTheme(t){ chooseTheme(t); await nextFrame(); return currentTheme; },
+  async setDifficulty(d){ chooseDifficulty(d); await nextFrame(); return currentDifficulty; },
+  diffConfig(){ return { name:currentDifficulty, ...activeDiff() }; },
+  mute(on){ audio.ensure(); const m=audio.setMuted(on!==undefined?on:!audio.isMuted());
+    const b=$('muteBtn'); if(b) b.textContent=m?'🔇':'🔊'; return m; },
   async start(){ startRun(); await nextFrame(); return state; },
   async reset(){ toReady(); await nextFrame(); return state; },
   flap(){ onFlap(); },
-  getState(){ return { state, score, best, theme:currentTheme, bird:{x:W.birdX,y:+bird.y.toFixed(2),vy:+bird.vy.toFixed(2)},
+  getState(){ return { state, score, best, streak, theme:currentTheme, difficulty:currentDifficulty,
+    bird:{x:W.birdX,y:+bird.y.toFixed(2),vy:+bird.vy.toFixed(2)},
     pipes:pipes.filter(p=>p.active).map(p=>({x:+p.x.toFixed(2),gapY:+p.gapY.toFixed(2),gap:+p.gap.toFixed(2)})) }; },
   get score(){ return score; },
+  get streak(){ return streak; },
   // collision probe for tests: does a bird at height `by` hit a pipe at (px,gapY,gap)?
   hitTest(px, by, gapY, gap){ return pipeHit({ x:px, gapY, gap, active:true }, by); },
   capInfo(){ return { half:pipeCap.half, h:pipeCap.h, bodyHalf:W.pipeW, colR:W.colR }; },
@@ -1521,10 +1695,13 @@ window.__game = {
     buildSky();
     buildBird();
     initTrailPool();
+    initSpeedLines();
     buildGround();
     applyTheme(currentTheme);
     buildPost();
     buildThemeUI();
+    buildDifficultyUI();
+    $('muteBtn').textContent = audio.isMuted()?'🔇':'🔊';
     toReady();
     renderer.setAnimationLoop(frame);
     await nextFrame(); await nextFrame();
