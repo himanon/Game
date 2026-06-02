@@ -355,8 +355,8 @@ function loadBG(name,key){
     undefined, e=>rej(new Error('bg '+name))));
 }
 // local repo glTF model (Quaternius Stylized Nature MegaKit, CC0) — relative URL
-function loadModel(name,key){
-  return new Promise((res,rej)=> new GLTFLoader().load('assets/models/nature/'+name+'.gltf',
+function loadModel(name,key,dir){
+  return new Promise((res,rej)=> new GLTFLoader().load('assets/models/'+(dir||'nature')+'/'+name+'.gltf',
     g=>{ assets.glb[key]=g; res(g); }, undefined, e=>rej(new Error('model '+name))));
 }
 
@@ -386,6 +386,12 @@ async function preload(){
     loadModel('Plant_1','plant1'), loadModel('Plant_1_Big','plant2'), loadModel('Mushroom_Common','mushroom'),
     loadModel('Rock_Medium_1','rock1'), loadModel('Rock_Medium_2','rock2'),
     loadModel('Pebble_Round_1','pebble1'), loadModel('Pebble_Round_3','pebble2'),
+    // medieval buildings (KayKit Hexagon Pack, CC0): castle landmark + village + tower pipes
+    loadModel('building_castle_red','castle','build'),
+    loadModel('building_church_red','church','build'),
+    loadModel('building_home_A_red','homeA','build'), loadModel('building_home_B_red','homeB','build'),
+    loadModel('building_tavern_red','tavern','build'),
+    loadModel('building_tower_base_red','towerPipe','build'),
     loadTex('textures/waternormals.jpg','detailN', true)   // tileable detail normal map
   ];
   await track(jobs);
@@ -757,11 +763,11 @@ let pipeMats = null;
 function makePipeMaterials(theme){
   if(pipeMats){ Object.values(pipeMats).forEach(m=>m&&m.dispose&&m.dispose()); }
   const L=LOOK[theme];
-  if(theme==='hills'){ pipeMats={ shaft:stoneMat(0x9b9280,0.95,0x4e7a36,0.5), cap:stoneMat(0x8f8b78,0.9,0x4e7a36,0.3), deco:stdMat({color:C(0x4e8a36),roughness:1}), flower:stdMat({vertexColors:true, roughness:0.6}), vine:stdMat({color:C(0x3f7a2c), roughness:0.85}) };
-    // dampen HDR reflections on the stone so the pipes stop catching the golden hotspot/bloom
-    pipeMats.shaft.envMapIntensity=0.45; pipeMats.cap.envMapIntensity=0.45;
+  if(theme==='hills'){ pipeMats={ shaft:stoneMat(0x8b8e93,0.95,0x6f757c,0.25), cap:stoneMat(0x8f8b78,0.9,0x4e7a36,0.3), deco:stdMat({color:C(0x4e8a36),roughness:1}), flower:stdMat({vertexColors:true, roughness:0.6}), vine:stdMat({color:C(0x3f7a2c), roughness:0.85}) };
+    // grey stone foundation column under the medieval tower; dampen HDR so it doesn't catch bloom
+    pipeMats.shaft.envMapIntensity=0.4; pipeMats.cap.envMapIntensity=0.45;
     if(assets.tex.detailN){ const nrm=assets.tex.detailN.clone(); nrm.repeat.set(3,5); nrm.needsUpdate=true; const ns=new THREE.Vector2(0.5,0.5);
-      pipeMats.shaft.normalMap=nrm; pipeMats.shaft.normalScale=ns; pipeMats.cap.normalMap=nrm; pipeMats.cap.normalScale=ns; pipeMats._nrm=nrm; } }
+      pipeMats.shaft.normalMap=nrm; pipeMats.shaft.normalScale=ns; pipeMats._nrm=nrm; } }
   else if(theme==='space') pipeMats={ shaft:veinMat(0x4a4664,0x7a4bff), cap:metalMat(0x55506e,0.4), deco:emissiveMat(0xa07bff,0x1a1430,true) };
   else if(theme==='ocean') pipeMats={ shaft:stoneMat(0xc66a52,0.7,0xff8f5e,0.3), cap:stdMat({color:C(0xff9a5e),roughness:0.6}), deco:emissiveMat(0xff5f8b,0x3a1020,false) };
   else pipeMats={ shaft:stoneMat(0xc2ad84,0.96), cap:stoneMat(0xb39d72,0.94), deco:stdMat({color:C(0x5c8a3a),roughness:1}) };
@@ -772,7 +778,8 @@ function pipeShaftGeo(theme){
   if(theme==='space'||theme==='ocean'){ const g=new THREE.CylinderGeometry(r,r,1,16,3,true);
     const p=g.attributes.position; for(let i=0;i<p.count;i++){ const a=Math.atan2(p.getZ(i),p.getX(i)); const bump=Math.sin(a*5+p.getY(i)*6)*0.12+(srand()-0.5)*0.06; const nr=r+bump; const len=Math.hypot(p.getX(i),p.getZ(i))||1; p.setX(i,p.getX(i)/len*nr); p.setZ(i,p.getZ(i)/len*nr); } p.needsUpdate=true; g.computeVertexNormals(); return g; }
   if(theme==='ruins'){ return new THREE.CylinderGeometry(r*0.96, r*1.02, 1, 14, 2, true); } // fluted-ish column
-  return new THREE.CylinderGeometry(r, r*1.05, 1, 18, 2, true); // hills stone drum
+  // hills: narrow hexagonal grey-stone foundation that sits under the medieval tower
+  return new THREE.CylinderGeometry(r*0.82, r*0.86, 1, 6, 1, true);
 }
 function pipeCapGeo(theme){
   const r=W.pipeW;
@@ -810,12 +817,25 @@ function buildCapDeco(theme, mat, isTop){
   return g;
 }
 
+const TOWER_H=5.5;   // medieval-tower height for hills pipes (sized so its half-width ~= W.pipeW)
+// a full, undistorted tower model facing the gap: upright on the bottom pipe, flipped on the top
+function buildTowerCap(isTop){
+  const g=new THREE.Group();
+  for(const p of (_pgeo.towerPrims||[])){ const m=new THREE.Mesh(p.geo, p.mat); m.castShadow=true; m.receiveShadow=true; g.add(m); }
+  if(isTop){ g.rotation.x=Math.PI; g.position.y=TOWER_H; }   // flip so battlements face DOWN into the gap
+  else { g.position.y=-TOWER_H; }                            // upright, battlements at the gap edge facing UP
+  return g;
+}
 function makePipeSegment(theme, isTop){
   const seg=new THREE.Group();
   const shaft=new THREE.Mesh(_pgeo.shaft, pipeMats.shaft); shaft.name='shaft'; shaft.castShadow=true; shaft.receiveShadow=true;
   const capGroup=new THREE.Group();
-  const cap=new THREE.Mesh(_pgeo.cap, pipeMats.cap); cap.castShadow=true; capGroup.add(cap);
-  const deco=buildCapDeco(theme, pipeMats.deco, isTop); capGroup.add(deco);
+  if(theme==='hills' && _pgeo.towerPrims){
+    capGroup.add(buildTowerCap(isTop));                      // real tower replaces the carved-stone cap
+  } else {
+    const cap=new THREE.Mesh(_pgeo.cap, pipeMats.cap); cap.castShadow=true; capGroup.add(cap);
+    const deco=buildCapDeco(theme, pipeMats.deco, isTop); capGroup.add(deco);
+  }
   seg.add(shaft, capGroup);
   return { seg, shaft, capGroup };
 }
@@ -835,17 +855,18 @@ function buildPipePair(theme){
 }
 function rebuildPipes(theme){
   pipes.forEach(p=>p.grp.removeFromParent());
-  Object.values(_pgeo).forEach(g=>g&&g.dispose&&g.dispose());
+  // dispose plain geometries; the tower prim geos live in an array, dispose them separately
+  Object.values(_pgeo).forEach(g=>{ if(g&&g.dispose) g.dispose(); else if(Array.isArray(g)) g.forEach(p=>p.geo&&p.geo.dispose()); });
   pipes=[];
   makePipeMaterials(theme);
-  // cap collision footprint (half-width, half-height of the lip), matched to pipeCapGeo
-  pipeCap = ({ hills:{half:W.pipeW*1.30, h:0.55}, space:{half:W.pipeW*1.28, h:0.50},
+  // cap collision footprint (half-width, half-height of the lip), matched to the rendered cap.
+  // hills uses a real tower: its body half-width ~= W.pipeW, battlements flare a touch wider.
+  pipeCap = ({ hills:{half:W.pipeW*1.12, h:0.50}, space:{half:W.pipeW*1.28, h:0.50},
                ocean:{half:W.pipeW*1.40, h:0.50}, ruins:{half:W.pipeW*1.25, h:0.45} })[theme]
             || { half:W.pipeW*1.30, h:0.5 };
   _pgeo={ shaft:pipeShaftGeo(theme), cap:pipeCapGeo(theme) };
   if(theme==='hills'){
-    if(assets.glb.flower) _pgeo.capFlower=glbMergedGeo(assets.glb.flower, 0.55);
-    _pgeo.capVine=new THREE.CapsuleGeometry(0.055, 1.0, 2, 6);
+    if(assets.glb.towerPipe) _pgeo.towerPrims=prepModelPrims(assets.glb.towerPipe, TOWER_H, { env:0.4, rough:0.92 });
   }
   for(let i=0;i<PIPE_POOL;i++) pipes.push(buildPipePair(theme));
 }
@@ -1031,6 +1052,18 @@ function sceneryHills(L){
     animators.push((dt,t)=>{ sp.position.x=bx+Math.sin(t*0.6+ph)*ax; sp.position.y=by+Math.sin(t*0.9+ph*1.7)*ay; sp.scale.x=s*(0.5+Math.abs(Math.sin(t*fl+ph))*0.6); }); }
   // distant windmill landmark on the far hills (rotating sails)
   buildWindmill(-12, W.groundY+0.8, -40, 2.6);
+  // medieval kingdom (KayKit Hexagon Pack, CC0): a castle focal point on the far hills,
+  // plus a small village dotting the midground, all drifting with slow parallax.
+  modelBand('castle', 1, [{ x:16, y:W.groundY-0.1, z:-44, s:11, ry:-0.5, phase:0 }],
+    { speedMul:0.14, minX:-70, maxX:70, shadow:false, env:0.25, rough:0.95 });
+  modelBand('church', 1, spread(2,-30,30,(it)=>{ it.y=W.groundY-0.05; it.z=rrange(-26,-19); it.s=rrange(3.8,4.6); it.ry=rrange(-0.6,0.6); }),
+    { speedMul:0.30, minX:-40, maxX:40, shadow:true, env:0.4, rough:0.9 });
+  modelBand('homeA', 1, spread(lowfx?2:3,-32,32,(it)=>{ it.y=W.groundY-0.05; it.z=rrange(-24,-16); it.s=rrange(2.4,3.0); it.ry=rrange(0,6.28); }),
+    { speedMul:0.32, minX:-40, maxX:40, shadow:true, env:0.4, rough:0.9 });
+  modelBand('homeB', 1, spread(lowfx?2:3,-30,30,(it)=>{ it.y=W.groundY-0.05; it.z=rrange(-23,-15); it.s=rrange(2.6,3.2); it.ry=rrange(0,6.28); }),
+    { speedMul:0.33, minX:-40, maxX:40, shadow:true, env:0.4, rough:0.9 });
+  modelBand('tavern', 1, spread(1,-20,20,(it)=>{ it.y=W.groundY-0.05; it.z=rrange(-22,-17); it.s=rrange(3.4,3.8); it.ry=rrange(-0.5,0.5); }),
+    { speedMul:0.31, minX:-40, maxX:40, shadow:true, env:0.4, rough:0.9 });
   // crisp geo clouds (mid layer, drift)
   bands.push(new Band(gCloud(), stdMat({color:C(L.cloud), roughness:1, emissive:C(0xffe9c0), emissiveIntensity:0.1}),
     spread(7,-50,50,(it)=>{ it.y=rrange(5,11); it.z=rrange(-55,-30); it.s=rrange(1.8,3.4); }),
