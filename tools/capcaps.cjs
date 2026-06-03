@@ -12,7 +12,7 @@ const srv=http.createServer((rq,rs)=>{ let p=decodeURIComponent(rq.url.split('?'
   await new Promise(r=>srv.listen(8733,r));
   const br=await chromium.launch({args:['--use-gl=swiftshader','--enable-unsafe-swiftshader']});
   const pg=await (await br.newContext({viewport:{width:900,height:600}})).newPage();
-  await pg.goto('http://localhost:8733/flappy3d.html?fullfx',{waitUntil:'domcontentloaded'});
+  await pg.goto('http://localhost:8733/flappy3d.html',{waitUntil:'domcontentloaded'});
   await pg.waitForFunction(()=>window.__game && window.__game.ready, null, {timeout:120000});
   await pg.evaluate(()=>window.__game.ready);
   for(const th of list){
@@ -21,13 +21,13 @@ const srv=http.createServer((rq,rs)=>{ let p=decodeURIComponent(rq.url.split('?'
     await pg.evaluate(()=>window.__game.setSeed(7));
     await pg.evaluate(()=>window.__game.start());
     // fly level: flap whenever falling below mid, warm frames until a pipe is just ahead of the bird
-    for(let i=0;i<140;i++){
+    for(let i=0;i<70;i++){
       const st=await pg.evaluate(()=>window.__game.getState());
       if(st.state!=='PLAYING'){ await pg.evaluate(()=>window.__game.start()); }
-      if(st.bird && st.bird.vy<0.5 && st.bird.y<2.0) await pg.evaluate(()=>window.__game.flap());
-      const near=(st.pipes||[]).some(p=>Math.abs(p.x-3)<1.2);   // pipe near bird x
+      if(st.bird && st.bird.y<2.6) await pg.evaluate(()=>window.__game.flap());
+      const near=(st.pipes||[]).some(p=>Math.abs(p.x-3)<1.5);   // pipe near bird x
       if(near){ break; }
-      await pg.evaluate(()=>window.__game.warm(1));
+      await pg.evaluate(()=>window.__game.warm(2));
     }
     await pg.evaluate(()=>window.__game.warm(1));
     await pg.screenshot({path:path.join(OUT,'caps_'+th+'.png')});
