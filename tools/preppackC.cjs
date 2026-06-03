@@ -9,12 +9,10 @@ const DEST=path.join(__dirname,'..','assets','models','space');
 fs.mkdirSync(DEST,{recursive:true});
 
 const CHOSEN=[
-  // rocket pipe (assembled from parts: engine + body + nose)
-  'rocket_baseA','rocket_sidesA','rocket_topA',
   // landmarks: drifting freighter + distant station
   'craft_cargoA','hangar_largeA',
-  // asteroids (tumbling) + crystal pops
-  'meteor_detailed','rock_largeA','rock_crystalsLargeA','rock_crystalsLargeB',
+  // asteroid belt: meteors + rocks + crystal pops + small debris
+  'meteor_detailed','rock_largeA','rock_largeB','rocks_smallA','rock_crystalsLargeA','rock_crystalsLargeB',
   // debris: satellite + drifting speeder
   'satelliteDish','craft_speederB'
 ];

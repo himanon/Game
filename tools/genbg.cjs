@@ -190,6 +190,45 @@ fs.mkdirSync(OUT, { recursive: true });
       finish('butterfly',c,ctx,4,false);
     })();
 
+    // ===== SPACE: NEBULA (far colourful cloud band, tileable) =====
+    (function(){ const W=1280,H=448,c=mk(W,H),ctx=c.getContext('2d'); const rand=rng(71);
+      function neb(cx,cy,r,col){ const g=ctx.createRadialGradient(cx,cy,0,cx,cy,r);
+        g.addColorStop(0,col.replace('A','0.5')); g.addColorStop(0.5,col.replace('A','0.16')); g.addColorStop(1,col.replace('A','0'));
+        ctx.fillStyle=g; ctx.beginPath(); ctx.arc(cx,cy,r,0,6.28); ctx.fill(); }
+      const cols=['rgba(150,70,220,A)','rgba(220,60,150,A)','rgba(60,120,230,A)','rgba(90,200,210,A)'];
+      for(let i=0;i<14;i++){ const cx=rand()*W, cy=H*(0.18+rand()*0.72), r=170+rand()*320, col=cols[(rand()*cols.length)|0];
+        for(let k=0;k<3;k++){ const ox=(rand()-0.5)*r, oy=(rand()-0.5)*r*0.6, rr=r*(0.6+rand()*0.6);
+          neb(cx+ox,cy+oy,rr,col); neb(cx+ox-W,cy+oy,rr,col); neb(cx+ox+W,cy+oy,rr,col); } }
+      ctx.fillStyle='#ffffff'; for(let i=0;i<420;i++){ const x=rand()*W,y=rand()*H,s=rand()*1.6+0.3; ctx.globalAlpha=0.25+rand()*0.7; ctx.fillRect(x,y,s,s); } ctx.globalAlpha=1;
+      finish('space_nebula',c,ctx,3,true);
+    })();
+
+    // ===== SPACE: GALAXY (diagonal dust band + star clusters, tileable) =====
+    (function(){ const W=1280,H=384,c=mk(W,H),ctx=c.getContext('2d'); const rand=rng(88);
+      ctx.save(); ctx.translate(W/2,H/2); ctx.rotate(-0.17); ctx.translate(-W/2,-H/2);
+      const g=ctx.createLinearGradient(0,H*0.32,0,H*0.68); g.addColorStop(0,'rgba(120,80,200,0)'); g.addColorStop(0.5,'rgba(160,125,235,0.5)'); g.addColorStop(1,'rgba(80,140,210,0)');
+      ctx.fillStyle=g; ctx.fillRect(-W,H*0.32,W*3,H*0.36);
+      for(let i=0;i<26;i++){ const x=rand()*W, y=H*0.5+(rand()-0.5)*H*0.16, r=30+rand()*95; const rg=ctx.createRadialGradient(x,y,0,x,y,r); rg.addColorStop(0,'rgba(235,215,255,0.45)'); rg.addColorStop(1,'rgba(235,215,255,0)'); ctx.fillStyle=rg; ctx.beginPath(); ctx.arc(x,y,r,0,6.28); ctx.fill(); }
+      ctx.restore();
+      ctx.fillStyle='#ffffff'; for(let i=0;i<320;i++){ const x=rand()*W,y=rand()*H,s=rand()*1.8+0.3; ctx.globalAlpha=0.3+rand()*0.7; ctx.fillRect(x,y,s,s); } ctx.globalAlpha=1;
+      finish('space_galaxy',c,ctx,3,true);
+    })();
+
+    // ===== SPACE: PLANETS (distant lit planet discs + bright stars, tileable) =====
+    (function(){ const W=1280,H=384,c=mk(W,H),ctx=c.getContext('2d'); const rand=rng(102);
+      function planet(cx,cy,r,c1,c2,rim){
+        const g=ctx.createRadialGradient(cx-r*0.32,cy-r*0.32,r*0.1,cx,cy,r); g.addColorStop(0,c1); g.addColorStop(0.7,c2); g.addColorStop(1,'#0a0a18');
+        ctx.fillStyle=g; ctx.beginPath(); ctx.arc(cx,cy,r,0,6.28); ctx.fill();
+        const sg=ctx.createRadialGradient(cx+r*0.5,cy+r*0.42,r*0.1,cx,cy,r*1.3); sg.addColorStop(0,'rgba(0,0,12,0)'); sg.addColorStop(1,'rgba(0,0,12,0.7)'); ctx.fillStyle=sg; ctx.beginPath(); ctx.arc(cx,cy,r,0,6.28); ctx.fill();
+        ctx.lineWidth=Math.max(2,r*0.045); ctx.strokeStyle=rim; ctx.globalAlpha=0.6; ctx.beginPath(); ctx.arc(cx,cy,r*0.985,-2.5,-0.5); ctx.stroke(); ctx.globalAlpha=1;
+      }
+      planet(W*0.17,H*0.42,96,'#caa37a','#8a5a3a','#ffd9a0');
+      planet(W*0.58,H*0.55,140,'#7fa8d8','#3a5a8c','#bfe0ff');
+      planet(W*0.86,H*0.30,70,'#b98fd0','#6a3f8c','#e8c8ff');
+      ctx.fillStyle='#ffffff'; for(let i=0;i<220;i++){ const x=rand()*W,y=rand()*H,s=rand()*1.8+0.3; ctx.globalAlpha=0.3+rand()*0.7; ctx.fillRect(x,y,s,s); } ctx.globalAlpha=1;
+      finish('space_planets',c,ctx,3,true);
+    })();
+
     return out;
   });
 

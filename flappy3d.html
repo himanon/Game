@@ -218,8 +218,8 @@ const THEMES = {
            sun:0xffe7b0, sunI:2.8, sunPos:[ 9, 11, 5 ], amb:0xbcd0c0, ambI:0.55,
            pipe:{ color:0x8a8f7a, rough:0.92, metal:0.0, emissive:0x000000, emI:0 },
            accent:0xffe07a },
-  space: { hdr:'royal_esplanade_1k.hdr', bg:0x05060f, blur:0.0, fog:0x0a0a1a, fogD:0.006,
-           sun:0xaecbff, sunI:1.6, sunPos:[ 7, 6, 4 ], amb:0x2a2350, ambI:0.6,
+  space: { hdr:'royal_esplanade_1k.hdr', bg:0x0a0a1f, blur:0.0, fog:0x140e2e, fogD:0.0045,
+           sun:0xaecbff, sunI:1.6, sunPos:[ 7, 6, 4 ], amb:0x332b5c, ambI:0.72,
            pipe:{ color:0x4a4660, rough:0.5, metal:0.7, emissive:0x6a3bff, emI:1.4 },
            accent:0x8f7bff },
   ocean: { hdr:'quarry_01_1k.hdr', bg:0x0a4d6e, blur:0.32, fog:0x0c5f86, fogD:0.03,
@@ -237,9 +237,9 @@ const LOOK = {
   hills: { skyTop:0x3a82d8, skyMid:0x90c9ef, skyBot:0xfbe7c6, sun:0xffe6b0, sunPos:[0.62,0.40,-1], sunSize:0.045, sunGlow:0.40,
            cloud:0xfff4e2, hillCols:[0x66a043,0x53913e,0x437a36,0x37672e], grass:0x6aa838,
            treeTrunk:0x6b4b2e, treeLeaf:[0x5aa83d,0x47962f,0x77bd4a], horizonHaze:0xfbe7c6, ground:0x4f8a34 },
-  space: { skyTop:0x05030f, skyMid:0x0d0a26, skyBot:0x1a1340, sun:0x9fc6ff, sunPos:[0.5,0.34,-1], sunSize:0.03, sunGlow:0.25,
+  space: { skyTop:0x070416, skyMid:0x160e38, skyBot:0x281c5e, sun:0x9fc6ff, sunPos:[0.5,0.34,-1], sunSize:0.03, sunGlow:0.25,
            cloud:0x6a4bd0, hillCols:[0x141225,0x10101f], grass:0x161430,
-           nebula:[0x6a2bd0,0xd02b8a,0x2b6ad0], planet:[0xc97a4a,0x6a8fd0,0xd0b46a], ground:0x121026 },
+           nebula:[0x7a3be0,0xe24b9a,0x3b7ae0], planet:[0xc97a4a,0x6a8fd0,0xd0b46a], ground:0x1a1640 },
   ocean: { skyTop:0x012c4a, skyMid:0x064b73, skyBot:0x0a86b0, sun:0xdfffff, sunPos:[0.3,0.62,-1], sunSize:0.04, sunGlow:0.6,
            cloud:0x9fe7ff, hillCols:[0x07435f,0x063a52], grass:0x0a5c7a,
            coral:[0xff6f61,0xff9a3c,0xff4f8b,0xc04bff], seaweed:[0x2faa6a,0x3cc47e], fish:[0xffd34e,0xff7a3c,0x5ec8ff], ground:0x0c5066 },
@@ -380,6 +380,7 @@ async function preload(){
     loadBG('hills.png','bgHills'), loadBG('treeline.png','bgTreeline'),
     loadBG('balloon.png','balloon'), loadBG('birdv.png','birdv'),
     loadBG('eagle.png','eagle'), loadBG('butterfly.png','butterfly'),
+    loadBG('space_nebula.png','bgSNebula'), loadBG('space_galaxy.png','bgSGalaxy'), loadBG('space_planets.png','bgSPlanets'),
     // real low-poly nature models (Quaternius MegaKit, CC0) for the hills meadow
     loadModel('CommonTree_1','tree1'), loadModel('CommonTree_3','tree2'), loadModel('Pine_2','pine'),
     loadModel('Bush_Common_Flowers','bush'), loadModel('Fern_1','fern'),
@@ -392,9 +393,9 @@ async function preload(){
     loadModel('building_home_A_red','homeA','build'), loadModel('building_home_B_red','homeB','build'),
     loadModel('building_tavern_red','tavern','build'),
     loadModel('building_tower_base_red','towerPipe','build'),
-    // sci-fi space models (Kenney Space Kit, CC0): rocket pipes + asteroids + debris + landmarks
-    loadModel('rocket_baseA','rkBase','space','glb'), loadModel('rocket_sidesA','rkBody','space','glb'), loadModel('rocket_topA','rkTop','space','glb'),
+    // sci-fi space models (Kenney Space Kit, CC0): asteroid belt + debris + landmarks
     loadModel('meteor_detailed','meteor','space','glb'), loadModel('rock_largeA','astRock','space','glb'),
+    loadModel('rock_largeB','astRockB','space','glb'), loadModel('rocks_smallA','pebbleS','space','glb'),
     loadModel('rock_crystalsLargeA','crystalA','space','glb'), loadModel('rock_crystalsLargeB','crystalB','space','glb'),
     loadModel('satelliteDish','satellite','space','glb'), loadModel('craft_speederB','speeder','space','glb'),
     loadModel('craft_cargoA','freighter','space','glb'), loadModel('hangar_largeA','station','space','glb'),
@@ -515,6 +516,22 @@ function veinMat(baseHex, glowHex){
     const n = mx_noise_float(positionWorld.mul(1.8)).mul(0.5).add(0.5);
     const veins = smoothstep(float(0.60), float(0.70), n);
     return glow.mul(veins).mul(sin(time.mul(2.2)).mul(0.25).add(0.85));
+  })();
+  return m;
+}
+/* sleek metallic pillar with glowing neon energy rings (space pipe shaft).
+   Rings are keyed to WORLD Y so they stay fixed-pitch when the shaft scales in Y. */
+function techPillarMat(baseHex, glowHex){
+  const m = stdMat({ color:C(baseHex), roughness:0.26, metalness:0.9 });
+  const glow = cv(glowHex);
+  m.emissiveNode = Fn(()=>{
+    const y = positionWorld.y;
+    const band = abs(fract(y.mul(0.7).add(0.5)).sub(0.5));               // 0 at each ring centre
+    const rings = smoothstep(float(0.07), float(0.0), band);            // crisp neon bands
+    const pan = smoothstep(float(0.60), float(0.72), mx_noise_float(positionWorld.mul(vec3(3.0,0.6,3.0))).mul(0.5).add(0.5)).mul(0.3);
+    const fres = pow(oneMinus(clamp(dot(normalize(normalWorld), normalize(cameraPosition.sub(positionWorld))),0,1)), float(2.5));
+    const pulse = sin(time.mul(2.2)).mul(0.18).add(0.92);
+    return glow.mul( rings.mul(1.8).add(fres.mul(0.55)).add(pan) ).mul(pulse);
   })();
   return m;
 }
@@ -774,14 +791,16 @@ function makePipeMaterials(theme){
     pipeMats.shaft.envMapIntensity=0.4; pipeMats.cap.envMapIntensity=0.45;
     if(assets.tex.detailN){ const nrm=assets.tex.detailN.clone(); nrm.repeat.set(3,5); nrm.needsUpdate=true; const ns=new THREE.Vector2(0.5,0.5);
       pipeMats.shaft.normalMap=nrm; pipeMats.shaft.normalScale=ns; pipeMats._nrm=nrm; } }
-  else if(theme==='space') pipeMats={ shaft:veinMat(0x4a4664,0x7a4bff), cap:metalMat(0x55506e,0.4), deco:emissiveMat(0xa07bff,0x1a1430,true) };
+  else if(theme==='space'){ pipeMats={ shaft:techPillarMat(0x3a3c52,0x6fa8ff), cap:metalMat(0x596484,0.34), core:emissiveMat(0x8fd0ff,0x0e1830,true) };
+    pipeMats.shaft.envMapIntensity=0.6; pipeMats.cap.envMapIntensity=0.7; }
   else if(theme==='ocean') pipeMats={ shaft:stoneMat(0xc66a52,0.7,0xff8f5e,0.3), cap:stdMat({color:C(0xff9a5e),roughness:0.6}), deco:emissiveMat(0xff5f8b,0x3a1020,false) };
   else pipeMats={ shaft:stoneMat(0xc2ad84,0.96), cap:stoneMat(0xb39d72,0.94), deco:stdMat({color:C(0x5c8a3a),roughness:1}) };
 }
 
 function pipeShaftGeo(theme){
   const r=W.pipeW;
-  if(theme==='space'||theme==='ocean'){ const g=new THREE.CylinderGeometry(r,r,1,16,3,true);
+  if(theme==='space'){ return new THREE.CylinderGeometry(r, r, 1, 24, 1, true); } // clean segmented tech pillar (rings come from the material)
+  if(theme==='ocean'){ const g=new THREE.CylinderGeometry(r,r,1,16,3,true);
     const p=g.attributes.position; for(let i=0;i<p.count;i++){ const a=Math.atan2(p.getZ(i),p.getX(i)); const bump=Math.sin(a*5+p.getY(i)*6)*0.12+(srand()-0.5)*0.06; const nr=r+bump; const len=Math.hypot(p.getX(i),p.getZ(i))||1; p.setX(i,p.getX(i)/len*nr); p.setZ(i,p.getZ(i)/len*nr); } p.needsUpdate=true; g.computeVertexNormals(); return g; }
   if(theme==='ruins'){ return new THREE.CylinderGeometry(r*0.96, r*1.02, 1, 14, 2, true); } // fluted-ish column
   // hills: narrow hexagonal grey-stone foundation that sits under the medieval tower
@@ -824,9 +843,8 @@ function buildCapDeco(theme, mat, isTop){
 }
 
 const TOWER_H=5.5;   // medieval-tower height for hills pipes (sized so its half-width ~= W.pipeW)
-const SPACE_H=6.5;   // assembled-rocket height for space pipes (nose faces the gap)
 // a full model facing the gap: upright on the bottom pipe, flipped on the top so the
-// "business end" (battlements / rocket nose, which sits at y=h) always points into the gap.
+// "business end" (battlements, which sits at y=h) always points into the gap.
 function buildModelCap(prims, isTop, h){
   const g=new THREE.Group();
   for(const p of (prims||[])){ const m=new THREE.Mesh(p.geo, p.mat); m.castShadow=true; m.receiveShadow=true; g.add(m); }
@@ -834,22 +852,18 @@ function buildModelCap(prims, isTop, h){
   else { g.position.y=-h; }                            // upright, top end at the gap edge facing UP
   return g;
 }
-// assemble a Kenney rocket from its parts (engine base + two body sections + nose), stacked,
-// then normalised to height `h` with the engine at y=0 and the nose at y=h.
-function prepRocketPrims(h){
-  const parts=[ ['rkBase',0], ['rkBody',1.6], ['rkBody',2.6], ['rkTop',3.6] ];
-  const prims=[]; const box=new THREE.Box3();
-  for(const [key,yoff] of parts){ const gl=assets.glb[key]; if(!gl) continue; gl.scene.updateMatrixWorld(true);
-    gl.scene.traverse(m=>{ if(!m.isMesh||!m.geometry) return;
-      const geo=m.geometry.clone(); geo.applyMatrix4(m.matrixWorld); geo.translate(0,yoff,0);
-      geo.computeBoundingBox(); box.union(geo.boundingBox);
-      prims.push({ geo, mat:(Array.isArray(m.material)?m.material[0]:m.material) });
-    });
-  }
-  if(!prims.length) return null;
-  const size=new THREE.Vector3(); box.getSize(size); const s=h/Math.max(0.001,size.y), minY=box.min.y;
-  for(const p of prims){ p.geo.scale(s,s,s); p.geo.translate(0,-minY*s,0); }
-  return prims;
+// space pipe cap: a metal collar + a bright pulsing reactor core that glows into the gap
+function buildReactorCap(isTop){
+  const g=new THREE.Group(); const r=W.pipeW, dir=isTop?-1:1;
+  const collar=new THREE.Mesh(new THREE.CylinderGeometry(r*1.14, r*0.98, 0.5, 24), pipeMats.cap);
+  collar.position.y=dir*0.05; collar.castShadow=true; g.add(collar); trackDispose(collar.geometry);
+  const lip=new THREE.Mesh(new THREE.TorusGeometry(r*1.08, 0.09, 8, 28), pipeMats.core);
+  lip.rotation.x=Math.PI/2; lip.position.y=dir*0.05; g.add(lip); trackDispose(lip.geometry);
+  const core=new THREE.Mesh(new THREE.IcosahedronGeometry(r*0.62, 1), pipeMats.core);
+  core.position.y=dir*0.42; g.add(core); trackDispose(core.geometry);
+  for(let i=0;i<6;i++){ const a=i/6*6.28; const n=new THREE.Mesh(new THREE.SphereGeometry(0.1,6,5), pipeMats.core);
+    n.position.set(Math.cos(a)*r*1.05, dir*0.05, Math.sin(a)*r*1.05); g.add(n); trackDispose(n.geometry); }
+  return g;
 }
 function makePipeSegment(theme, isTop){
   const seg=new THREE.Group();
@@ -857,8 +871,8 @@ function makePipeSegment(theme, isTop){
   const capGroup=new THREE.Group();
   if(theme==='hills' && _pgeo.towerPrims){
     capGroup.add(buildModelCap(_pgeo.towerPrims, isTop, TOWER_H));   // medieval tower
-  } else if(theme==='space' && _pgeo.rocketPrims){
-    capGroup.add(buildModelCap(_pgeo.rocketPrims, isTop, SPACE_H));  // rocket mounted on the energy pillar
+  } else if(theme==='space'){
+    capGroup.add(buildReactorCap(isTop));                           // glowing reactor core on the tech pillar
   } else {
     const cap=new THREE.Mesh(_pgeo.cap, pipeMats.cap); cap.castShadow=true; capGroup.add(cap);
     const deco=buildCapDeco(theme, pipeMats.deco, isTop); capGroup.add(deco);
@@ -888,14 +902,12 @@ function rebuildPipes(theme){
   makePipeMaterials(theme);
   // cap collision footprint (half-width, half-height of the lip), matched to the rendered cap.
   // hills uses a real tower; space mounts a rocket on the energy pillar (pillar = collision body).
-  pipeCap = ({ hills:{half:W.pipeW*1.12, h:0.50}, space:{half:W.pipeW*1.06, h:0.45},
+  pipeCap = ({ hills:{half:W.pipeW*1.12, h:0.50}, space:{half:W.pipeW*1.15, h:0.50},
                ocean:{half:W.pipeW*1.40, h:0.50}, ruins:{half:W.pipeW*1.25, h:0.45} })[theme]
             || { half:W.pipeW*1.30, h:0.5 };
   _pgeo={ shaft:pipeShaftGeo(theme), cap:pipeCapGeo(theme) };
   if(theme==='hills'){
     if(assets.glb.towerPipe) _pgeo.towerPrims=prepModelPrims(assets.glb.towerPipe, TOWER_H, { env:0.4, rough:0.92 });
-  } else if(theme==='space'){
-    if(assets.glb.rkBase) _pgeo.rocketPrims=prepRocketPrims(SPACE_H);
   }
   for(let i=0;i<PIPE_POOL;i++) pipes.push(buildPipePair(theme));
 }
@@ -1214,6 +1226,33 @@ function scenerySpace(L){
     { speedMul:0.5, minX:-34, maxX:34, spin:0.15, env:0.5 });
   modelBand('speeder', 1, spread(lowfx?1:2,-30,30,(it)=>{ it.y=rrange(-4,9); it.z=rrange(-16,-6); it.s=rrange(1.1,1.6); it.ry=Math.PI*0.5; it.rx=0.1; }),
     { speedMul:1.25, minX:-34, maxX:34, env:0.55 });
+
+  // ---- painted parallax depth (mirrors the hills layering); extend low to fill the lower region ----
+  bgLayer(assets.tex.bgSNebula,  -118, 50, W.groundY-13, 0.0013, 0xffffff, true);
+  bgLayer(assets.tex.bgSGalaxy,   -92, 40, W.groundY-9,  0.0028, 0xffffff);
+  bgLayer(assets.tex.bgSPlanets,  -66, 30, W.groundY-3,  0.0052, 0xffffff);
+
+  // ---- hero planet: a large glowing sphere with a soft atmosphere rim, far off to one side ----
+  (function(){
+    const pg=new THREE.Mesh(new THREE.SphereGeometry(9.5, 36, 26),
+      stdMat({ color:C(0x3a5a8c), roughness:0.9, metalness:0.0, emissive:C(0x18305a), emissiveIntensity:0.55 }));
+    pg.position.set(-23, 13, -80); themeRoot.add(pg); trackDispose(pg.geometry, pg.material);
+    const atm=new THREE.Mesh(new THREE.SphereGeometry(10.4, 36, 26),
+      new THREE.MeshBasicNodeMaterial({ color:C(0x6fb0ff), transparent:true, opacity:0.16, side:THREE.BackSide, depthWrite:false, blending:THREE.AdditiveBlending }));
+    atm.position.copy(pg.position); themeRoot.add(atm); trackDispose(atm.material);
+    animators.push((dt)=>{ pg.rotation.y += dt*0.02; });
+  })();
+
+  // ---- asteroid-belt FLOOR: a dense drifting belt you skim over (replaces the flat ground) ----
+  ['astRock','astRockB','meteor','crystalA','crystalB'].forEach((k,i)=>{
+    modelBand(k, 1, spread(lowfx?5:8, -34,34, (it)=>{ it.y=rrange(-15.5,-8.5); it.z=rrange(-9,3); it.s=rrange(0.7,2.0); it.rx=rrange(0,6.28); it.ry=rrange(0,6.28); }),
+      { speedMul:1.0, minX:-36, maxX:36, spin:0.3+i*0.06, env:0.5 });
+  });
+  // deeper, dimmer belt for parallax depth (fogged back)
+  modelBand('pebbleS', 1, spread(lowfx?6:10, -34,34, (it)=>{ it.y=rrange(-18,-11); it.z=rrange(-26,-13); it.s=rrange(0.8,1.8); it.rx=rrange(0,6.28); it.ry=rrange(0,6.28); }),
+    { speedMul:0.55, minX:-36, maxX:36, spin:0.22, env:0.4 });
+  modelBand('astRockB', 1, spread(lowfx?3:6, -34,34, (it)=>{ it.y=rrange(-17,-10); it.z=rrange(-24,-13); it.s=rrange(1.0,2.2); it.rx=rrange(0,6.28); it.ry=rrange(0,6.28); }),
+    { speedMul:0.5, minX:-36, maxX:36, spin:0.18, env:0.4 });
 }
 function sceneryOcean(L){
   // god-ray light shafts (additive sprites from top)
@@ -1294,7 +1333,7 @@ function applyTheme(name){
 
   // per-theme cinematic grade (hills = warm golden hour; others near-neutral)
   // punchier + less golden: lower warm tint, push saturation/vibrance up per theme
-  const G = ({ hills:{warm:0.05,sat:1.28,vig:0.36,lift:0.012}, space:{warm:0.0,sat:1.18,vig:0.42,lift:0.0},
+  const G = ({ hills:{warm:0.05,sat:1.28,vig:0.36,lift:0.012}, space:{warm:0.0,sat:1.24,vig:0.40,lift:0.0},
                ocean:{warm:0.03,sat:1.24,vig:0.38,lift:0.01}, ruins:{warm:0.07,sat:1.22,vig:0.34,lift:0.015} })[name] || {warm:0.05,sat:1.22,vig:0.34,lift:0.01};
   gradeU.warm.value=G.warm; gradeU.sat.value=G.sat; gradeU.vignette.value=G.vig; gradeU.lift.value=G.lift;
   // feed the sun direction to foliage rim lighting (dialed back so the gold rim doesn't dominate)
@@ -1303,8 +1342,8 @@ function applyTheme(name){
   if(ground){
     const gm=ground.userData.mat; gm.color.setHex(L.ground);
     if(gm.map){ gm.map=null; gm.needsUpdate=true; }
-    // hills draws its own contoured grass terrain (built in sceneryHills); hide the flat plane
-    ground.visible = (name!=='hills');
+    // hills draws its own terrain; space flies over an asteroid belt (no floor) -> hide the flat plane
+    ground.visible = (name!=='hills' && name!=='space');
   }
 
   // tint the bird's accent backlight to the theme
