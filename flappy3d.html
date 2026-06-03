@@ -933,8 +933,8 @@ function buildCapDeco(theme, mat, isTop){
 
 const TOWER_H=5.5;   // medieval-tower height for hills pipes (sized so its half-width ~= W.pipeW)
 const SPACE_CAP_H=1.9;   // space module cap height (height-fit so wide dishes stand proud, not flat)
-const OCEAN_CAP_H=1.7;   // sunken-treasure cap height for ocean pipes (Kenney Pirate Kit, CC0)
-const RUINS_CAP_H=2.1;   // graveyard-stone cap height for ruins pipes (Kenney Graveyard Kit, CC0)
+const OCEAN_CAP_H=2.4;   // sunken-treasure cap height for ocean pipes (Kenney Pirate Kit, CC0)
+const RUINS_CAP_H=2.9;   // graveyard-stone cap height for ruins pipes (Kenney Graveyard Kit, CC0)
 // a full model facing the gap: upright on the bottom pipe, flipped on the top so the
 // "business end" (battlements, which sits at y=h) always points into the gap.
 function buildModelCap(prims, isTop, h, protrude=0){
@@ -1014,7 +1014,7 @@ function rebuildPipes(theme){
   // cap collision footprint (half-width, half-height of the lip), matched to the rendered cap.
   // hills uses a real tower; space mounts a rocket on the energy pillar (pillar = collision body).
   pipeCap = ({ hills:{half:W.pipeW*1.12, h:0.50}, space:{half:W.pipeW*1.15, h:0.50},
-               ocean:{half:W.pipeW*1.40, h:0.50}, ruins:{half:W.pipeW*1.25, h:0.45} })[theme]
+               ocean:{half:W.pipeW*1.40, h:0.50}, ruins:{half:W.pipeW*1.25, h:0.50} })[theme]
             || { half:W.pipeW*1.30, h:0.5 };
   _pgeo={ shaft:pipeShaftGeo(theme), cap:pipeCapGeo(theme) };
   if(theme==='space') _pgeo.nodeRing=nodeRingGeo(W.pipeW*1.04,0.085);   // shared merged bolt-ring (1 draw vs 6)
