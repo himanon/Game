@@ -823,6 +823,7 @@ function prepModelPrims(gltf, targetSize, opts={}){
     const mat=Array.isArray(m.material)?m.material[0]:m.material;
     if(opts.env!=null && 'envMapIntensity' in mat) mat.envMapIntensity=opts.env;
     if(opts.rough!=null && 'roughness' in mat) mat.roughness=opts.rough;
+    if(opts.tint!=null && mat.color) mat.color.setHex(opts.tint);   // absolute (idempotent across rebuilds)
     prims.push({ geo:g, mat });
   });
   return prims;
@@ -835,6 +836,7 @@ class ModelBand{
     this.speedMul=opts.speedMul!=null?opts.speedMul:1;
     this.minX=opts.minX!=null?opts.minX:-30; this.maxX=opts.maxX!=null?opts.maxX:30;
     this.sway=opts.sway||0; this.bob=opts.bob||0; this.spin=opts.spin||0;
+    this.snapY=opts.snapY||null;   // optional terrain sampler: lifts each instance onto the contoured ground
     this._d=new THREE.Object3D();
     this.meshes=prims.map(p=>{ const im=new THREE.InstancedMesh(p.geo,p.mat,items.length);
       im.frustumCulled=false; im.castShadow=!!opts.shadow; im.receiveShadow=!!opts.receive;
@@ -845,7 +847,8 @@ class ModelBand{
     for(let i=0;i<this.items.length;i++){ const it=this.items[i];
       const sway=this.sway?Math.sin(t*1.5+it.phase)*this.sway*windGust:0;
       const bob=this.bob?Math.sin(t*0.9+it.phase)*this.bob:0;
-      d.position.set(it.x, it.y+bob, it.z);
+      const sy=this.snapY?this.snapY(it.x, it.z):0;   // ride the terrain contour as the prop scrolls
+      d.position.set(it.x, it.y+sy+bob, it.z);
       d.rotation.set(it.rx||0,(it.ry||0)+(this.spin?t*this.spin:0),(it.rz||0)+sway);
       d.scale.set(it.s*(it.sx||1), it.s, it.s); d.updateMatrix();
       for(const im of this.meshes) im.setMatrixAt(i,d.matrix);
@@ -1026,7 +1029,7 @@ function rebuildPipes(theme){
   const capMix=({
     space:{ h:SPACE_CAP_H, list:[['capDish',{env:0.6,rough:0.45}],['antenna',{env:0.6,rough:0.5}],['domeStation',{env:0.6,rough:0.3}],['generator',{env:0.6,rough:0.5}]] },
     ocean:{ h:OCEAN_CAP_H, list:[['ocChest',{env:0.5,rough:0.6}],['ocBarrel',{env:0.5,rough:0.7}],['ocBottle',{env:0.5,rough:0.4}],['ocRocks',{env:0.5,rough:0.85}]] },
-    ruins:{ h:RUINS_CAP_H, list:[['rcObelisk',{env:0.4,rough:0.92}],['rcUrn',{env:0.4,rough:0.9}],['rcPillar',{env:0.4,rough:0.92}],['rcStone',{env:0.4,rough:0.9}]] },
+    ruins:{ h:RUINS_CAP_H, list:[['rcObelisk',{env:0.45,rough:0.9,tint:0x6f7480}],['rcUrn',{env:0.45,rough:0.88,tint:0x6f7480}],['rcPillar',{env:0.45,rough:0.9,tint:0x6f7480}],['rcStone',{env:0.45,rough:0.88,tint:0x6f7480}]] },
   })[theme];
   if(capMix){
     const variants=[];
@@ -1379,19 +1382,21 @@ function scenerySpace(L){
     { speedMul:0.10, minX:-72, maxX:72, env:0.5 });
   modelBand('station', 1, [{ x:26, y:-2.5, z:-60, s:13, rx:0, ry:-0.5, phase:0 }],
     { speedMul:0.07, minX:-82, maxX:82, env:0.5 });
-  // real asteroids: crystal-studded rocks + tumbling meteors (replace the procedural rock band)
-  modelBand('crystalA', 1, spread(lowfx?4:6,-30,30,(it)=>{ it.y=rrange(-8,10); it.z=rrange(-12,2); it.s=rrange(1.4,3.0); it.rx=rrange(0,6.28); it.ry=rrange(0,6.28); }),
-    { speedMul:0.9, minX:-34, maxX:34, spin:0.4, env:0.5 });
-  modelBand('crystalB', 1, spread(lowfx?3:5,-28,28,(it)=>{ it.y=rrange(-7,9); it.z=rrange(-11,1); it.s=rrange(1.2,2.6); it.rx=rrange(0,6.28); it.ry=rrange(0,6.28); }),
-    { speedMul:0.92, minX:-32, maxX:32, spin:0.5, env:0.5 });
-  modelBand('meteor', 1, spread(lowfx?5:8,-30,30,(it)=>{ it.y=rrange(-9,10); it.z=rrange(-12,3); it.s=rrange(0.8,2.0); it.rx=rrange(0,6.28); it.ry=rrange(0,6.28); }),
-    { speedMul:0.95, minX:-34, maxX:34, spin:0.6, env:0.45 });
-  modelBand('astRock', 1, spread(lowfx?3:5,-26,26,(it)=>{ it.y=rrange(-8,9); it.z=rrange(-10,1); it.s=rrange(1.0,2.2); it.rx=rrange(0,6.28); it.ry=rrange(0,6.28); }),
-    { speedMul:0.88, minX:-30, maxX:30, spin:0.45, env:0.45 });
-  // drifting debris: a satellite dish + a speeder zipping past
-  if(!lowfx) modelBand('satellite', 1, spread(2,-30,30,(it)=>{ it.y=rrange(2,12); it.z=rrange(-22,-10); it.s=rrange(1.6,2.4); it.rx=0.3; it.ry=rrange(0,6.28); }),
+  // real asteroids: crystal-studded rocks + tumbling meteors, kept in the BACKGROUND (behind the pillars)
+  // and all sharing one drift speed so they hold formation instead of sliding through each other.
+  const BELT=0.9;
+  modelBand('crystalA', 1, spread(lowfx?4:5,-30,30,(it)=>{ it.y=rrange(2,13); it.z=rrange(-26,-16); it.s=rrange(1.4,3.0); it.rx=rrange(0,6.28); it.ry=rrange(0,6.28); }),
+    { speedMul:BELT, minX:-34, maxX:34, spin:0.4, env:0.5 });
+  modelBand('crystalB', 1, spread(lowfx?3:4,-28,28,(it)=>{ it.y=rrange(-9,-2); it.z=rrange(-25,-15); it.s=rrange(1.2,2.6); it.rx=rrange(0,6.28); it.ry=rrange(0,6.28); }),
+    { speedMul:BELT, minX:-32, maxX:32, spin:0.5, env:0.5 });
+  modelBand('meteor', 1, spread(lowfx?4:6,-30,30,(it)=>{ it.y=rrange(-7,12); it.z=rrange(-24,-14); it.s=rrange(0.8,2.0); it.rx=rrange(0,6.28); it.ry=rrange(0,6.28); }),
+    { speedMul:BELT, minX:-34, maxX:34, spin:0.6, env:0.45 });
+  modelBand('astRock', 1, spread(lowfx?3:4,-26,26,(it)=>{ it.y=rrange(-6,11); it.z=rrange(-23,-13); it.s=rrange(1.0,2.2); it.rx=rrange(0,6.28); it.ry=rrange(0,6.28); }),
+    { speedMul:BELT, minX:-30, maxX:30, spin:0.45, env:0.45 });
+  // drifting debris: a satellite dish + a speeder zipping past (kept in front of the belt so nothing clips)
+  if(!lowfx) modelBand('satellite', 1, spread(2,-30,30,(it)=>{ it.y=rrange(3,12); it.z=rrange(-11,-8); it.s=rrange(1.6,2.4); it.rx=0.3; it.ry=rrange(0,6.28); }),
     { speedMul:0.5, minX:-34, maxX:34, spin:0.15, env:0.5 });
-  modelBand('speeder', 1, spread(lowfx?1:2,-30,30,(it)=>{ it.y=rrange(-4,9); it.z=rrange(-16,-6); it.s=rrange(1.1,1.6); it.ry=Math.PI*0.5; it.rx=0.1; }),
+  modelBand('speeder', 1, spread(lowfx?1:2,-30,30,(it)=>{ it.y=rrange(-4,9); it.z=rrange(-10,-5); it.s=rrange(1.1,1.6); it.ry=Math.PI*0.5; it.rx=0.1; }),
     { speedMul:1.25, minX:-34, maxX:34, env:0.55 });
 
   // ---- painted parallax depth (mirrors the hills layering); extend low to fill the lower region ----
@@ -1401,80 +1406,84 @@ function scenerySpace(L){
 
   // ---- MARS TERRAIN: a real contoured 3D surface (ambientCG Ground025 grain + regolith shader) ----
   buildMarsTerrain();
+  // ground props ride the contour: snapY lifts each instance by the terrain height at its current x,z
+  // so colony buildings/antennas sit ON the dunes as they scroll (no floating / no burying).
+  const marsAdd=(x,z)=>marsHeight(x,z);
   // real 3D crater + boulder features sitting ON the surface (scroll at world speed to sell motion)
   modelBand('crater', 2.5, spread(lowfx?3:5,-36,36,(it)=>{ it.y=W.groundY+0.02; it.z=rrange(-12,4); it.s=rrange(1.6,3.2); it.ry=rrange(0,6.28); }),
-    { speedMul:1.0, minX:-38, maxX:38, env:0.45, receive:true });
+    { speedMul:1.0, minX:-38, maxX:38, env:0.45, receive:true, snapY:marsAdd });
   modelBand('craterL', 4, spread(lowfx?2:3,-36,36,(it)=>{ it.y=W.groundY+0.02; it.z=rrange(-14,-2); it.s=rrange(2.2,3.6); it.ry=rrange(0,6.28); }),
-    { speedMul:1.0, minX:-38, maxX:38, env:0.45 });
+    { speedMul:1.0, minX:-38, maxX:38, env:0.45, snapY:marsAdd });
   ['astRock','astRockB'].forEach((k)=>{
     modelBand(k, 1, spread(lowfx?4:6, -34,34, (it)=>{ it.y=W.groundY+rrange(0.0,0.5); it.z=rrange(-8,5); it.s=rrange(0.9,2.4); it.rx=rrange(-0.15,0.15); it.ry=rrange(0,6.28); }),
-      { speedMul:1.0, minX:-36, maxX:36, spin:0, env:0.5 });
+      { speedMul:1.0, minX:-36, maxX:36, spin:0, env:0.5, snapY:marsAdd });
   });
   modelBand('pebbleS', 1, spread(lowfx?6:10,-34,34,(it)=>{ it.y=W.groundY+rrange(0,0.3); it.z=rrange(-8,5); it.s=rrange(0.5,1.2); it.rx=rrange(0,6.28); it.ry=rrange(0,6.28); }),
-    { speedMul:1.0, minX:-36, maxX:36, env:0.5 });
+    { speedMul:1.0, minX:-36, maxX:36, env:0.5, snapY:marsAdd });
 
   // ---- GROUNDED MARS COLONY: buildings, comms array, transit + defence, all planted on the surface ----
-  // far skyline (slow parallax, raised onto the back dunes)
-  modelBand('structure', 1, [{ x:40, y:W.groundY+1.8, z:-50, s:12, ry:-0.5, phase:0 }], { speedMul:0.14, minX:-60, maxX:60, env:0.5, receive:true });
-  modelBand('platform',  1, [{ x:-34, y:W.groundY+0.6, z:-44, s:13, ry:0.4, phase:0 }], { speedMul:0.16, minX:-52, maxX:52, env:0.5 });
-  modelBand('station',   1, [{ x:-20, y:W.groundY+0.5, z:-42, s:9, ry:0.5, phase:0 }], { speedMul:0.20, minX:-48, maxX:48, env:0.5 });   // hangar_largeA
-  if(!lowfx) modelBand('stationB', 1, [{ x:24, y:W.groundY+0.5, z:-36, s:7, ry:-0.4, phase:0 }], { speedMul:0.26, minX:-46, maxX:46, env:0.5 });   // hangar_roundB
-  modelBand('generator', 1, spread(lowfx?1:2,-40,40,(it)=>{ it.y=W.groundY+0.4; it.z=rrange(-46,-30); it.s=rrange(4,6); it.ry=rrange(0,6.28); }),
-    { speedMul:0.24, minX:-44, maxX:44, env:0.5 });
+  // far skyline (slow parallax; snapY plants each on the actual dune height as it scrolls)
+  modelBand('structure', 1, [{ x:40, y:W.groundY+0.2, z:-50, s:12, ry:-0.5, phase:0 }], { speedMul:0.14, minX:-60, maxX:60, env:0.5, receive:true, snapY:marsAdd });
+  modelBand('platform',  1, [{ x:-34, y:W.groundY+0.2, z:-44, s:13, ry:0.4, phase:0 }], { speedMul:0.16, minX:-52, maxX:52, env:0.5, snapY:marsAdd });
+  modelBand('station',   1, [{ x:-20, y:W.groundY+0.2, z:-42, s:9, ry:0.5, phase:0 }], { speedMul:0.20, minX:-48, maxX:48, env:0.5, snapY:marsAdd });   // hangar_largeA
+  if(!lowfx) modelBand('stationB', 1, [{ x:24, y:W.groundY+0.2, z:-36, s:7, ry:-0.4, phase:0 }], { speedMul:0.26, minX:-46, maxX:46, env:0.5, snapY:marsAdd });   // hangar_roundB
+  modelBand('generator', 1, spread(lowfx?1:2,-40,40,(it)=>{ it.y=W.groundY+0.1; it.z=rrange(-46,-30); it.s=rrange(4,6); it.ry=rrange(0,6.28); }),
+    { speedMul:0.24, minX:-44, maxX:44, env:0.5, snapY:marsAdd });
   // mid colony detail (HQ only — keeps the lowfx draw-call budget sane)
   if(!lowfx){
-    modelBand('gate', 1, [{ x:6, y:W.groundY+0.3, z:-34, s:7, ry:0.3, phase:0 }], { speedMul:0.3, minX:-44, maxX:44, env:0.5 });
-    modelBand('chimney', 1, spread(3,-38,38,(it)=>{ it.y=W.groundY+0.2; it.z=rrange(-30,-18); it.s=rrange(2.5,3.8); it.ry=rrange(0,6.28); }),
-      { speedMul:0.4, minX:-40, maxX:40, env:0.5 });
-    modelBand('supports', 1, spread(3,-38,38,(it)=>{ it.y=W.groundY+0.2; it.z=rrange(-28,-16); it.s=rrange(2.5,3.5); it.ry=rrange(0,6.28); }),
-      { speedMul:0.42, minX:-40, maxX:40, env:0.5 });
+    modelBand('gate', 1, [{ x:6, y:W.groundY+0.1, z:-34, s:7, ry:0.3, phase:0 }], { speedMul:0.3, minX:-44, maxX:44, env:0.5, snapY:marsAdd });
+    modelBand('chimney', 1, spread(3,-38,38,(it)=>{ it.y=W.groundY+0.1; it.z=rrange(-30,-18); it.s=rrange(2.5,3.8); it.ry=rrange(0,6.28); }),
+      { speedMul:0.4, minX:-40, maxX:40, env:0.5, snapY:marsAdd });
+    modelBand('supports', 1, spread(3,-38,38,(it)=>{ it.y=W.groundY+0.1; it.z=rrange(-28,-16); it.s=rrange(2.5,3.5); it.ry=rrange(0,6.28); }),
+      { speedMul:0.42, minX:-40, maxX:40, env:0.5, snapY:marsAdd });
   }
   // comms array: wireless antennas + satellite dishes planted on the ground, angled at the sky
-  modelBand('antenna', 1, spread(lowfx?2:3,-36,36,(it)=>{ it.y=W.groundY+0.2; it.z=rrange(-26,-12); it.s=rrange(2.2,3.2); it.ry=rrange(0,6.28); }),
-    { speedMul:0.5, minX:-40, maxX:40, env:0.5 });
-  modelBand('satellite', 1, spread(2,-34,34,(it)=>{ it.y=W.groundY+0.3; it.z=rrange(-22,-8); it.s=rrange(1.8,2.6); it.rx=-0.3; it.ry=rrange(0,6.28); }),
-    { speedMul:0.6, minX:-38, maxX:38, env:0.5 });
-  if(!lowfx) modelBand('dishLarge', 1, [{ x:14, y:W.groundY+0.8, z:-28, s:5, ry:0.5, rx:-0.2, phase:0 }], { speedMul:0.42, minX:-44, maxX:44, env:0.5 });
+  modelBand('antenna', 1, spread(lowfx?2:3,-36,36,(it)=>{ it.y=W.groundY+0.1; it.z=rrange(-26,-12); it.s=rrange(2.2,3.2); it.ry=rrange(0,6.28); }),
+    { speedMul:0.5, minX:-40, maxX:40, env:0.5, snapY:marsAdd });
+  modelBand('satellite', 1, spread(2,-34,34,(it)=>{ it.y=W.groundY+0.2; it.z=rrange(-22,-8); it.s=rrange(1.8,2.6); it.rx=-0.3; it.ry=rrange(0,6.28); }),
+    { speedMul:0.6, minX:-38, maxX:38, env:0.5, snapY:marsAdd });
+  if(!lowfx) modelBand('dishLarge', 1, [{ x:14, y:W.groundY+0.2, z:-28, s:5, ry:0.5, rx:-0.2, phase:0 }], { speedMul:0.42, minX:-44, maxX:44, env:0.5, snapY:marsAdd });
   // monorail line + defence turrets across the colony
-  if(!lowfx) modelBand('monorail', 1, [{ x:-10, y:W.groundY+1.0, z:-24, s:7, ry:0.5, phase:0 }], { speedMul:0.55, minX:-40, maxX:40, env:0.5 });
-  modelBand('turret', 1, spread(2,-34,34,(it)=>{ it.y=W.groundY+0.15; it.z=rrange(-8,3); it.s=rrange(1.0,1.6); it.ry=rrange(0,6.28); }),
-    { speedMul:1.0, minX:-36, maxX:36, env:0.5 });
+  if(!lowfx) modelBand('monorail', 1, [{ x:-10, y:W.groundY+0.2, z:-24, s:7, ry:0.5, phase:0 }], { speedMul:0.55, minX:-40, maxX:40, env:0.5, snapY:marsAdd });
+  modelBand('turret', 1, spread(2,-34,34,(it)=>{ it.y=W.groundY+0.05; it.z=rrange(-8,3); it.s=rrange(1.0,1.6); it.ry=rrange(0,6.28); }),
+    { speedMul:1.0, minX:-36, maxX:36, env:0.5, snapY:marsAdd });
   // foreground life: a rover trundling + astronauts dotted across the regolith
-  modelBand('rover', 1, spread(1,-34,34,(it)=>{ it.y=W.groundY+0.15; it.z=rrange(-6,4); it.s=rrange(1.6,2.2); it.ry=Math.PI*0.5; }),
-    { speedMul:1.0, minX:-36, maxX:36, env:0.55 });
+  modelBand('rover', 1, spread(1,-34,34,(it)=>{ it.y=W.groundY+0.05; it.z=rrange(-6,4); it.s=rrange(1.6,2.2); it.ry=Math.PI*0.5; }),
+    { speedMul:1.0, minX:-36, maxX:36, env:0.55, snapY:marsAdd });
   if(!lowfx){
-    modelBand('astroA', 1, spread(1,-30,30,(it)=>{ it.y=W.groundY+0.1; it.z=rrange(-5,4); it.s=rrange(1.0,1.4); it.ry=rrange(0,6.28); }),
-      { speedMul:1.0, minX:-34, maxX:34, env:0.55 });
-    modelBand('astroB', 1, spread(1,-30,30,(it)=>{ it.y=W.groundY+0.1; it.z=rrange(-5,4); it.s=rrange(1.0,1.4); it.ry=rrange(0,6.28); }),
-      { speedMul:1.0, minX:-34, maxX:34, env:0.55 });
+    modelBand('astroA', 1, spread(1,-30,30,(it)=>{ it.y=W.groundY+0.05; it.z=rrange(-5,4); it.s=rrange(1.0,1.4); it.ry=rrange(0,6.28); }),
+      { speedMul:1.0, minX:-34, maxX:34, env:0.55, snapY:marsAdd });
+    modelBand('astroB', 1, spread(1,-30,30,(it)=>{ it.y=W.groundY+0.05; it.z=rrange(-5,4); it.s=rrange(1.0,1.4); it.ry=rrange(0,6.28); }),
+      { speedMul:1.0, minX:-34, maxX:34, env:0.55, snapY:marsAdd });
   }
 
-  // ---- launching rockets (Kenney Space Kit): two stacked rockets drifting up with a thruster glow ----
+  // ---- floating rockets (Kenney Space Kit): two rockets hanging in orbit with a slow thruster glow ----
   (function rockets(){
-    const cfgs=[{ x:-30, z:-46, size:9, parts:[{key:'rkBase',y:0},{key:'rkTop',y:1.6}] },
-                { x:32,  z:-52, size:7, parts:[{key:'rkSides',y:0},{key:'rkTop',y:1.0}] }];
+    const cfgs=[{ x:-30, y:9,  z:-50, size:8, parts:[{key:'rkBase',y:0},{key:'rkTop',y:1.6}] },
+                { x:34,  y:13, z:-58, size:6, parts:[{key:'rkSides',y:0},{key:'rkTop',y:1.0}] }];
     const list=[];
     for(const c of cfgs){ const g=rocketGroup(c.parts, c.size, { env:0.5 }); if(!g) continue;
-      const base=W.groundY+rrange(0,1); g.position.set(c.x, base, c.z); g.rotation.y=rrange(-0.5,0.5); themeRoot.add(g);
+      g.position.set(c.x, c.y, c.z); g.rotation.set(0, rrange(-0.5,0.5), rrange(-0.12,0.12)); themeRoot.add(g);
       const fm=new THREE.SpriteNodeMaterial({ map:assets.tex.smoke, color:C(0xffb24a), transparent:true, opacity:0.0, depthWrite:false, blending:THREE.AdditiveBlending });
       const flame=new THREE.Sprite(fm); flame.scale.set(c.size*0.42, c.size*0.8, 1); flame.position.set(0,-c.size*0.05,0); g.add(flame); trackDispose(fm);
-      list.push({ g, flame, base, spd:rrange(1.4,2.6), top:26 });
+      list.push({ g, flame, y0:c.y, ph:rrange(0,6.28) });
     }
-    if(list.length) animators.push((dt,t)=>{ for(const r of list){ r.g.position.y+=r.spd*dt;
-      r.flame.material.opacity=0.42+Math.sin(t*26+r.base)*0.18;
-      if(r.g.position.y>r.top) r.g.position.y=r.base-2; } });
+    if(list.length) animators.push((dt,t)=>{ for(const r of list){
+      r.g.position.y=r.y0+Math.sin(t*0.4+r.ph)*0.8;          // gentle zero-g drift in place
+      r.g.rotation.y+=dt*0.12;
+      r.flame.material.opacity=0.34+Math.sin(t*26+r.ph)*0.16; } });
   })();
 
   // ---- ORBITAL: glass-dome station landmark + ship traffic + an animated speeder squadron (sky) ----
   modelBand('domeStation', 1, [{ x:-26, y:14, z:-78, s:13, ry:0.5, phase:0 }], { speedMul:0.05, minX:-92, maxX:92, env:0.5 });
   if(!lowfx) modelBand('freighterB', 1, spread(1,-44,44,(it)=>{ it.y=rrange(9,13); it.z=rrange(-48,-36); it.s=8.5; it.ry=0.6; it.rx=0.05; }),
     { speedMul:0.16, minX:-74, maxX:74, env:0.55 });
-  modelBand('miner', 1, spread(lowfx?1:2,-34,34,(it)=>{ it.y=rrange(5,11); it.z=rrange(-24,-12); it.s=rrange(1.4,2.0); it.ry=Math.PI*0.5; it.rx=0.08; }),
+  modelBand('miner', 1, spread(lowfx?1:2,-34,34,(it)=>{ it.y=rrange(8,12); it.z=rrange(-12,-9); it.s=rrange(1.4,2.0); it.ry=Math.PI*0.5; it.rx=0.08; }),
     { speedMul:0.85, minX:-36, maxX:36, env:0.55 });
-  if(!lowfx) modelBand('racer', 1, spread(2,-34,34,(it)=>{ it.y=rrange(4,10); it.z=rrange(-18,-8); it.s=rrange(1.0,1.4); it.ry=Math.PI*0.5; it.rx=0.05; }),
+  if(!lowfx) modelBand('racer', 1, spread(2,-34,34,(it)=>{ it.y=rrange(3,7); it.z=rrange(-10,-7); it.s=rrange(1.0,1.4); it.ry=Math.PI*0.5; it.rx=0.05; }),
     { speedMul:1.5, minX:-36, maxX:36, env:0.6 });
   // coordinated speeder squadron drifting across mid-field (reuses addFlock; static GLB -> drift+bob)
-  addFlock(assets.glb.speederC, lowfx?3:5, { size:2.0, xMin:-40, xMax:40, yMin:3, yMax:11, zMin:-30, zMax:-16, spdMin:2.2, spdMax:3.6 });
+  addFlock(assets.glb.speederC, lowfx?3:5, { size:2.0, xMin:-40, xMax:40, yMin:4, yMax:9, zMin:-13, zMax:-10, spdMin:2.2, spdMax:3.6 });
 
   // ---- AMBIENT LIFE: Mars dust haze, drifting regolith dust, blinking beacons, foreground framing ----
   (function(){ const m=new THREE.SpriteNodeMaterial({ map:assets.tex.cloud, color:C(0xc77a4a), transparent:true, opacity:0.16, depthWrite:false, blending:THREE.AdditiveBlending });
