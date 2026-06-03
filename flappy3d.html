@@ -946,6 +946,11 @@ function buildModelCap(prims, isTop, h, protrude=0){
   else { g.position.y=protrude-h; }                             // upright, top end pokes UP into the gap
   return g;
 }
+// 6 bolt-nodes fused into ONE geometry (was 6 separate meshes per cap) — keeps the draw count down
+function nodeRingGeo(ringR, sphR){ const parts=[];
+  for(let i=0;i<6;i++){ const a=i/6*6.28; const g=new THREE.SphereGeometry(sphR,6,5); g.translate(Math.cos(a)*ringR,0,Math.sin(a)*ringR); parts.push(g); }
+  return mergeGeometries(parts,false);
+}
 // space pipe cap: a metal collar + a bright pulsing reactor core that glows into the gap
 function buildReactorCap(isTop){
   const g=new THREE.Group(); const r=W.pipeW, dir=isTop?-1:1;
@@ -955,8 +960,7 @@ function buildReactorCap(isTop){
   lip.rotation.x=Math.PI/2; lip.position.y=dir*0.05; g.add(lip); trackDispose(lip.geometry);
   const core=new THREE.Mesh(new THREE.IcosahedronGeometry(r*0.62, 1), pipeMats.core);
   core.position.y=dir*0.42; g.add(core); trackDispose(core.geometry);
-  for(let i=0;i<6;i++){ const a=i/6*6.28; const n=new THREE.Mesh(new THREE.SphereGeometry(0.1,6,5), pipeMats.core);
-    n.position.set(Math.cos(a)*r*1.05, dir*0.05, Math.sin(a)*r*1.05); g.add(n); trackDispose(n.geometry); }
+  const ring=new THREE.Mesh(nodeRingGeo(r*1.05,0.1), pipeMats.core); ring.position.y=dir*0.05; g.add(ring); trackDispose(ring.geometry);
   return g;
 }
 function makePipeSegment(theme, isTop, capPrims){
@@ -972,8 +976,7 @@ function makePipeSegment(theme, isTop, capPrims){
     collar.castShadow=true; capGroup.add(collar); trackDispose(collar.geometry);
     const lip=new THREE.Mesh(new THREE.TorusGeometry(r*1.06, 0.085, 8, 28), pipeMats.core);
     lip.rotation.x=Math.PI/2; lip.position.y=dir*0.02; capGroup.add(lip); trackDispose(lip.geometry);
-    for(let i=0;i<6;i++){ const a=i/6*6.28; const n=new THREE.Mesh(new THREE.SphereGeometry(0.085,6,5), pipeMats.core);
-      n.position.set(Math.cos(a)*r*1.04, dir*0.02, Math.sin(a)*r*1.04); capGroup.add(n); trackDispose(n.geometry); }
+    const ring=new THREE.Mesh(_pgeo.nodeRing||nodeRingGeo(r*1.04,0.085), pipeMats.core); ring.position.y=dir*0.02; capGroup.add(ring);
     const cp = capPrims || _pgeo.capV0;                             // varied space module per pillar (dish/antenna/dome/reactor)
     if(cp){ const mc=buildModelCap(cp, isTop, SPACE_CAP_H, 0.4); capGroup.add(mc); capSpinners.push(mc); }  // slow scan rotation
     else capGroup.add(buildReactorCap(isTop));                      // fallback if no cap model loaded
@@ -1014,6 +1017,7 @@ function rebuildPipes(theme){
                ocean:{half:W.pipeW*1.40, h:0.50}, ruins:{half:W.pipeW*1.25, h:0.45} })[theme]
             || { half:W.pipeW*1.30, h:0.5 };
   _pgeo={ shaft:pipeShaftGeo(theme), cap:pipeCapGeo(theme) };
+  if(theme==='space') _pgeo.nodeRing=nodeRingGeo(W.pipeW*1.04,0.085);   // shared merged bolt-ring (1 draw vs 6)
   if(theme==='hills'){
     if(assets.glb.towerPipe) _pgeo.towerPrims=prepModelPrims(assets.glb.towerPipe, TOWER_H, { env:0.4, rough:0.92 });
   }
@@ -1362,7 +1366,7 @@ function scenerySpace(L){
   mkStars(90, 4.5, 0xbfe0ff, 1.0);
   mkStars(40, 6.0, 0xffe6bf, 1.0);
   // nebula clouds (big additive smoke sprites)
-  for(let i=0;i<5;i++){ const sp=new THREE.Sprite(new THREE.SpriteNodeMaterial({ map:assets.tex.smoke, color:C(L.nebula[i%L.nebula.length]), transparent:true, opacity:0.5, depthWrite:false, blending:THREE.AdditiveBlending }));
+  for(let i=0;i<(lowfx?3:5);i++){ const sp=new THREE.Sprite(new THREE.SpriteNodeMaterial({ map:assets.tex.smoke, color:C(L.nebula[i%L.nebula.length]), transparent:true, opacity:0.5, depthWrite:false, blending:THREE.AdditiveBlending }));
     sp.position.set(rrange(-30,30), rrange(-6,22), rrange(-75,-45)); sp.scale.setScalar(rrange(26,46)); themeRoot.add(sp); trackDispose(sp.material); }
   // real-textured planets (planetpixelemporium maps): Earth + Saturn + Jupiter + a moon + Neptune
   texPlanet('pEarth', 7.0, [-24, 13, -82], { spin:0.02, emi:0.18, atm:0x4a90e0 });
@@ -1385,7 +1389,7 @@ function scenerySpace(L){
   modelBand('astRock', 1, spread(lowfx?3:5,-26,26,(it)=>{ it.y=rrange(-8,9); it.z=rrange(-10,1); it.s=rrange(1.0,2.2); it.rx=rrange(0,6.28); it.ry=rrange(0,6.28); }),
     { speedMul:0.88, minX:-30, maxX:30, spin:0.45, env:0.45 });
   // drifting debris: a satellite dish + a speeder zipping past
-  modelBand('satellite', 1, spread(2,-30,30,(it)=>{ it.y=rrange(2,12); it.z=rrange(-22,-10); it.s=rrange(1.6,2.4); it.rx=0.3; it.ry=rrange(0,6.28); }),
+  if(!lowfx) modelBand('satellite', 1, spread(2,-30,30,(it)=>{ it.y=rrange(2,12); it.z=rrange(-22,-10); it.s=rrange(1.6,2.4); it.rx=0.3; it.ry=rrange(0,6.28); }),
     { speedMul:0.5, minX:-34, maxX:34, spin:0.15, env:0.5 });
   modelBand('speeder', 1, spread(lowfx?1:2,-30,30,(it)=>{ it.y=rrange(-4,9); it.z=rrange(-16,-6); it.s=rrange(1.1,1.6); it.ry=Math.PI*0.5; it.rx=0.1; }),
     { speedMul:1.25, minX:-34, maxX:34, env:0.55 });
@@ -1414,7 +1418,7 @@ function scenerySpace(L){
   modelBand('structure', 1, [{ x:40, y:W.groundY+1.8, z:-50, s:12, ry:-0.5, phase:0 }], { speedMul:0.14, minX:-60, maxX:60, env:0.5, receive:true });
   modelBand('platform',  1, [{ x:-34, y:W.groundY+0.6, z:-44, s:13, ry:0.4, phase:0 }], { speedMul:0.16, minX:-52, maxX:52, env:0.5 });
   modelBand('station',   1, [{ x:-20, y:W.groundY+0.5, z:-42, s:9, ry:0.5, phase:0 }], { speedMul:0.20, minX:-48, maxX:48, env:0.5 });   // hangar_largeA
-  modelBand('stationB',  1, [{ x:24, y:W.groundY+0.5, z:-36, s:7, ry:-0.4, phase:0 }], { speedMul:0.26, minX:-46, maxX:46, env:0.5 });   // hangar_roundB
+  if(!lowfx) modelBand('stationB', 1, [{ x:24, y:W.groundY+0.5, z:-36, s:7, ry:-0.4, phase:0 }], { speedMul:0.26, minX:-46, maxX:46, env:0.5 });   // hangar_roundB
   modelBand('generator', 1, spread(lowfx?1:2,-40,40,(it)=>{ it.y=W.groundY+0.4; it.z=rrange(-46,-30); it.s=rrange(4,6); it.ry=rrange(0,6.28); }),
     { speedMul:0.24, minX:-44, maxX:44, env:0.5 });
   // mid colony detail (HQ only — keeps the lowfx draw-call budget sane)
@@ -1430,9 +1434,9 @@ function scenerySpace(L){
     { speedMul:0.5, minX:-40, maxX:40, env:0.5 });
   modelBand('satellite', 1, spread(2,-34,34,(it)=>{ it.y=W.groundY+0.3; it.z=rrange(-22,-8); it.s=rrange(1.8,2.6); it.rx=-0.3; it.ry=rrange(0,6.28); }),
     { speedMul:0.6, minX:-38, maxX:38, env:0.5 });
-  modelBand('dishLarge', 1, [{ x:14, y:W.groundY+0.8, z:-28, s:5, ry:0.5, rx:-0.2, phase:0 }], { speedMul:0.42, minX:-44, maxX:44, env:0.5 });
+  if(!lowfx) modelBand('dishLarge', 1, [{ x:14, y:W.groundY+0.8, z:-28, s:5, ry:0.5, rx:-0.2, phase:0 }], { speedMul:0.42, minX:-44, maxX:44, env:0.5 });
   // monorail line + defence turrets across the colony
-  modelBand('monorail', 1, [{ x:-10, y:W.groundY+1.0, z:-24, s:7, ry:0.5, phase:0 }], { speedMul:0.55, minX:-40, maxX:40, env:0.5 });
+  if(!lowfx) modelBand('monorail', 1, [{ x:-10, y:W.groundY+1.0, z:-24, s:7, ry:0.5, phase:0 }], { speedMul:0.55, minX:-40, maxX:40, env:0.5 });
   modelBand('turret', 1, spread(2,-34,34,(it)=>{ it.y=W.groundY+0.15; it.z=rrange(-8,3); it.s=rrange(1.0,1.6); it.ry=rrange(0,6.28); }),
     { speedMul:1.0, minX:-36, maxX:36, env:0.5 });
   // foreground life: a rover trundling + astronauts dotted across the regolith
@@ -1463,7 +1467,7 @@ function scenerySpace(L){
 
   // ---- ORBITAL: glass-dome station landmark + ship traffic + an animated speeder squadron (sky) ----
   modelBand('domeStation', 1, [{ x:-26, y:14, z:-78, s:13, ry:0.5, phase:0 }], { speedMul:0.05, minX:-92, maxX:92, env:0.5 });
-  modelBand('freighterB', 1, spread(1,-44,44,(it)=>{ it.y=rrange(9,13); it.z=rrange(-48,-36); it.s=8.5; it.ry=0.6; it.rx=0.05; }),
+  if(!lowfx) modelBand('freighterB', 1, spread(1,-44,44,(it)=>{ it.y=rrange(9,13); it.z=rrange(-48,-36); it.s=8.5; it.ry=0.6; it.rx=0.05; }),
     { speedMul:0.16, minX:-74, maxX:74, env:0.55 });
   modelBand('miner', 1, spread(lowfx?1:2,-34,34,(it)=>{ it.y=rrange(5,11); it.z=rrange(-24,-12); it.s=rrange(1.4,2.0); it.ry=Math.PI*0.5; it.rx=0.08; }),
     { speedMul:0.85, minX:-36, maxX:36, env:0.55 });
