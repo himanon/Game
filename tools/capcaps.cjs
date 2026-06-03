@@ -10,8 +10,8 @@ const srv=http.createServer((rq,rs)=>{ let p=decodeURIComponent(rq.url.split('?'
   const fp=path.join(ROOT,p); if(fs.existsSync(fp)&&fs.statSync(fp).isFile()){ rs.writeHead(200,{'content-type':MIME[path.extname(fp)]||'application/octet-stream'}); fs.createReadStream(fp).pipe(rs);} else { rs.writeHead(404); rs.end('no'); } });
 (async()=>{
   await new Promise(r=>srv.listen(8733,r));
-  const br=await chromium.launch({args:['--use-gl=swiftshader','--enable-unsafe-swiftshader']});
-  const pg=await (await br.newContext({viewport:{width:900,height:600}})).newPage();
+  const br=await chromium.launch({args:['--ignore-certificate-errors','--use-gl=swiftshader','--enable-unsafe-swiftshader']});
+  const pg=await (await br.newContext({ignoreHTTPSErrors:true,viewport:{width:900,height:600}})).newPage();
   await pg.goto('http://localhost:8733/flappy3d.html',{waitUntil:'domcontentloaded'});
   await pg.waitForFunction(()=>window.__game && window.__game.ready, null, {timeout:120000});
   await pg.evaluate(()=>window.__game.ready);
