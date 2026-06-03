@@ -16,6 +16,7 @@ const srv=http.createServer((rq,rs)=>{ let p=decodeURIComponent(rq.url.split('?'
   await pg.waitForFunction(()=>window.__game && window.__game.ready, null, {timeout:120000});
   await pg.evaluate(()=>window.__game.ready);
   for(const th of list){
+    await pg.evaluate(()=>window.__game.reset());     // back to READY so the theme switch applies
     await pg.evaluate(t=>window.__game.setTheme(t), th);
     await pg.evaluate(()=>window.__game.setDifficulty('easy'));
     await pg.evaluate(()=>window.__game.setSeed(7));
