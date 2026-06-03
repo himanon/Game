@@ -320,7 +320,7 @@ function halfWidth(){ return camDist()*Math.tan(THREE.MathUtils.degToRad(camera.
 /* ============================================================ *
  *  3. ASSET REGISTRY (external)
  * ============================================================ */
-const assets = { hdr:{}, tex:{}, glb:{}, bird:null };
+const assets = { hdr:{}, tex:{}, glb:{}, audioRaw:{}, bird:null };
 const _bar = document.getElementById('barf');
 const _lp = document.getElementById('lp');
 
@@ -358,6 +358,19 @@ function loadBG(name,key){
 function loadModel(name,key,dir,ext){
   return new Promise((res,rej)=> new GLTFLoader().load('assets/models/'+(dir||'nature')+'/'+name+'.'+(ext||'gltf'),
     g=>{ assets.glb[key]=g; res(g); }, undefined, e=>rej(new Error('model '+name))));
+}
+// local repo texture (Mars surface, planet maps) — relative URL with srgb/linear + tiling options
+function loadLocalTex(path,key,opts={}){
+  return new Promise((res,rej)=> new THREE.TextureLoader().load('assets/'+path,
+    t=>{ t.colorSpace = opts.linear?THREE.NoColorSpace:THREE.SRGBColorSpace;
+      if(opts.repeat){ t.wrapS=THREE.RepeatWrapping; t.wrapT=opts.repeatY?THREE.RepeatWrapping:THREE.ClampToEdgeWrapping; }
+      if(opts.aniso) t.anisotropy=8; assets.tex[key]=t; res(t); },
+    undefined, e=>rej(new Error('tex '+path))));
+}
+// downloaded CC0/CC-BY audio (raw bytes; decoded lazily once the AudioContext exists). Non-fatal.
+function loadAudio(path,key){
+  return fetch('assets/audio/'+path).then(r=>r.arrayBuffer()).then(b=>{ assets.audioRaw[key]=b; })
+    .catch(e=>{ console.warn('audio', path, e.message); });
 }
 
 async function preload(){
@@ -399,6 +412,24 @@ async function preload(){
     loadModel('rock_crystalsLargeA','crystalA','space','glb'), loadModel('rock_crystalsLargeB','crystalB','space','glb'),
     loadModel('satelliteDish','satellite','space','glb'), loadModel('craft_speederB','speeder','space','glb'),
     loadModel('craft_cargoA','freighter','space','glb'), loadModel('hangar_largeA','station','space','glb'),
+    // expanded sci-fi set: pillar caps + background traffic (ships/structures/rockets)
+    loadModel('satelliteDish_detailed','capDish','space','glb'),   // pillar cap (dish chosen over the generator alt)
+    loadModel('craft_cargoB','freighterB','space','glb'), loadModel('craft_miner','miner','space','glb'),
+    loadModel('craft_racer','racer','space','glb'), loadModel('craft_speederA','speederA','space','glb'),
+    loadModel('hangar_roundB','stationB','space','glb'), loadModel('structure_detailed','structure','space','glb'),
+    loadModel('platform_large','platform','space','glb'), loadModel('monorail_trainPassenger','monorail','space','glb'),
+    loadModel('turret_double','turret','space','glb'), loadModel('satelliteDish_large','dishLarge','space','glb'),
+    loadModel('rocket_baseA','rkBase','space','glb'), loadModel('rocket_sidesA','rkSides','space','glb'), loadModel('rocket_topA','rkTop','space','glb'),
+    // Mars ground (ambientCG Rock030, CC0) + real planet maps (planetpixelemporium, free)
+    loadLocalTex('textures/space/mars_color.jpg','marsGround',{repeat:true,repeatY:true,aniso:true}),
+    loadLocalTex('textures/space/mars_normal.jpg','marsGroundN',{linear:true,repeat:true,repeatY:true,aniso:true}),
+    loadLocalTex('textures/space/jupitermap.jpg','pJup'),
+    loadLocalTex('textures/space/saturnmap.jpg','pSat'), loadLocalTex('textures/space/saturnringcolor.jpg','pSatRing'),
+    loadLocalTex('textures/space/moonmap1k.jpg','pMoon'), loadLocalTex('textures/space/neptunemap.jpg','pNep'),
+    loadLocalTex('textures/space/earthmap1k.jpg','pEarth'),
+    // downloaded audio (Kenney CC0 sfx/jingle + Kevin MacLeod CC-BY music)
+    loadAudio('menu_loop.mp3','music'), loadAudio('death.mp3','death'),
+    loadAudio('click.mp3','click'), loadAudio('toggle.mp3','toggle'), loadAudio('confirm.mp3','confirm'),
     loadTex('textures/waternormals.jpg','detailN', true)   // tileable detail normal map
   ];
   await track(jobs);
@@ -843,6 +874,7 @@ function buildCapDeco(theme, mat, isTop){
 }
 
 const TOWER_H=5.5;   // medieval-tower height for hills pipes (sized so its half-width ~= W.pipeW)
+const SPACE_CAP_H=1.45;  // satellite-dish cap height for space pipes (Kenney Space Kit, CC0)
 // a full model facing the gap: upright on the bottom pipe, flipped on the top so the
 // "business end" (battlements, which sits at y=h) always points into the gap.
 function buildModelCap(prims, isTop, h){
@@ -872,7 +904,16 @@ function makePipeSegment(theme, isTop){
   if(theme==='hills' && _pgeo.towerPrims){
     capGroup.add(buildModelCap(_pgeo.towerPrims, isTop, TOWER_H));   // medieval tower
   } else if(theme==='space'){
-    capGroup.add(buildReactorCap(isTop));                           // glowing reactor core on the tech pillar
+    // satellite dish mounted on a glowing energy collar at the pillar tip, facing the gap
+    const dir=isTop?-1:1, r=W.pipeW;
+    const collar=new THREE.Mesh(new THREE.CylinderGeometry(r*1.14, r*0.98, 0.42, 24), pipeMats.cap);
+    collar.castShadow=true; capGroup.add(collar); trackDispose(collar.geometry);
+    const lip=new THREE.Mesh(new THREE.TorusGeometry(r*1.06, 0.085, 8, 28), pipeMats.core);
+    lip.rotation.x=Math.PI/2; lip.position.y=dir*0.02; capGroup.add(lip); trackDispose(lip.geometry);
+    for(let i=0;i<6;i++){ const a=i/6*6.28; const n=new THREE.Mesh(new THREE.SphereGeometry(0.085,6,5), pipeMats.core);
+      n.position.set(Math.cos(a)*r*1.04, dir*0.02, Math.sin(a)*r*1.04); capGroup.add(n); trackDispose(n.geometry); }
+    if(_pgeo.capPrims) capGroup.add(buildModelCap(_pgeo.capPrims, isTop, SPACE_CAP_H));
+    else capGroup.add(buildReactorCap(isTop));                       // fallback if the dish model didn't load
   } else {
     const cap=new THREE.Mesh(_pgeo.cap, pipeMats.cap); cap.castShadow=true; capGroup.add(cap);
     const deco=buildCapDeco(theme, pipeMats.deco, isTop); capGroup.add(deco);
@@ -908,6 +949,9 @@ function rebuildPipes(theme){
   _pgeo={ shaft:pipeShaftGeo(theme), cap:pipeCapGeo(theme) };
   if(theme==='hills'){
     if(assets.glb.towerPipe) _pgeo.towerPrims=prepModelPrims(assets.glb.towerPipe, TOWER_H, { env:0.4, rough:0.92 });
+  }
+  if(theme==='space'){
+    if(assets.glb.capDish) _pgeo.capPrims=prepModelPrims(assets.glb.capDish, SPACE_CAP_H, { env:0.6, rough:0.45 });
   }
   for(let i=0;i<PIPE_POOL;i++) pipes.push(buildPipePair(theme));
 }
@@ -1187,6 +1231,46 @@ function sceneryHills(L){
     spread(lowfx?16:30,-12,12,(it)=>{ it.y=W.groundY; it.z=rrange(9,13); it.s=rrange(2.4,4.2); it.sx=rrange(0.8,1.4); it.ry=rrange(-0.5,0.5); it.color=0x274d20; }),
     { speedMul:1.25, minX:-14, maxX:14, sway:0.06 }));
 }
+/* ---- space helpers: real-textured planets (planetpixelemporium maps), Saturn rings, assembled rockets ---- */
+function texPlanet(key, radius, pos, opt={}){
+  const tex=assets.tex[key]; if(!tex) return null;
+  // map for the lit side + a low-intensity self-emissive fill so the night side isn't pure black
+  const mat=new THREE.MeshStandardNodeMaterial({ map:tex, roughness:opt.rough!=null?opt.rough:0.96, metalness:0.0,
+    emissiveMap:tex, emissive:C(0xffffff), emissiveIntensity:opt.emi!=null?opt.emi:0.16 });
+  const m=new THREE.Mesh(new THREE.SphereGeometry(radius,48,32), mat);
+  m.position.set(pos[0],pos[1],pos[2]); if(opt.tilt) m.rotation.z=opt.tilt;
+  themeRoot.add(m); trackDispose(m.geometry, mat);
+  const spin=opt.spin!=null?opt.spin:0.03; animators.push((dt)=>{ m.rotation.y+=dt*spin; });
+  if(opt.atm){ const am=new THREE.MeshBasicNodeMaterial({ color:C(opt.atm), transparent:true, opacity:0.16, side:THREE.BackSide, depthWrite:false, blending:THREE.AdditiveBlending });
+    const a=new THREE.Mesh(new THREE.SphereGeometry(radius*1.06,40,28), am); a.position.copy(m.position); themeRoot.add(a); trackDispose(a.geometry, am); }
+  return m;
+}
+function saturnWithRings(radius, pos, opt={}){
+  const p=texPlanet('pSat', radius, pos, Object.assign({ spin:0.02, tilt:0.46 }, opt));
+  if(!p || !assets.tex.pSatRing) return p;
+  const ri=radius*1.22, ro=radius*2.05;
+  const rg=new THREE.RingGeometry(ri, ro, 96, 1);
+  const pa=rg.attributes.position, uv=rg.attributes.uv, v=new THREE.Vector3();   // remap the ring strip radially
+  for(let i=0;i<pa.count;i++){ v.fromBufferAttribute(pa,i); uv.setXY(i, clampf((v.length()-ri)/(ro-ri),0,1), 0.5); }
+  uv.needsUpdate=true;
+  const tex=assets.tex.pSatRing;   // no alpha channel -> use luminance as alpha so the gaps read through
+  const rm=new THREE.MeshStandardNodeMaterial({ map:tex, alphaMap:tex, side:THREE.DoubleSide, transparent:true, roughness:1, metalness:0,
+    emissiveMap:tex, emissive:C(0xffffff), emissiveIntensity:0.22, depthWrite:false });
+  const ring=new THREE.Mesh(rg, rm); ring.position.copy(p.position); ring.rotation.set(Math.PI*0.5-0.34, 0, 0.46);
+  themeRoot.add(ring); trackDispose(rg, rm);
+  return p;
+}
+function assembleModel(parts){
+  const grp=new THREE.Group();
+  for(const pt of parts){ const g=assets.glb[pt.key]; if(!g) continue; const c=g.scene.clone(true); c.position.y=pt.y||0; grp.add(c); }
+  grp.updateMatrixWorld(true); return { scene: grp };
+}
+function rocketGroup(parts, size, opt={}){
+  const a=assembleModel(parts); if(!a.scene.children.length) return null;
+  const prims=prepModelPrims(a, size, opt); const g=new THREE.Group();
+  for(const p of prims){ g.add(new THREE.Mesh(p.geo, p.mat)); trackDispose(p.geo); }
+  return g;
+}
 function scenerySpace(L){
   const lowfx=caps.lowfx;
   // starfield (two layers: dense small + sparse bright)
@@ -1203,10 +1287,12 @@ function scenerySpace(L){
   // nebula clouds (big additive smoke sprites)
   for(let i=0;i<5;i++){ const sp=new THREE.Sprite(new THREE.SpriteNodeMaterial({ map:assets.tex.smoke, color:C(L.nebula[i%L.nebula.length]), transparent:true, opacity:0.5, depthWrite:false, blending:THREE.AdditiveBlending }));
     sp.position.set(rrange(-30,30), rrange(-6,22), rrange(-75,-45)); sp.scale.setScalar(rrange(26,46)); themeRoot.add(sp); trackDispose(sp.material); }
-  // planets (kept procedural; they read well as distant glowing spheres)
-  bands.push(new Band(new THREE.IcosahedronGeometry(1,2), stdMat({roughness:0.85, flatShading:false}),
-    spread(3,-40,40,(it)=>{ it.y=rrange(4,16); it.z=rrange(-60,-40); it.s=rrange(3,7); it.color=L.planet[Math.floor(srand()*L.planet.length)]; }),
-    { speedMul:0.05, minX:-46, maxX:46, spin:0.05 }));
+  // real-textured planets (planetpixelemporium maps): Earth + Saturn + Jupiter + a moon + Neptune
+  texPlanet('pEarth', 7.0, [-24, 13, -82], { spin:0.02, emi:0.18, atm:0x4a90e0 });
+  saturnWithRings(6.4, [30, 14, -88], { emi:0.18 });
+  texPlanet('pJup', 8.0, [43, -5, -96], { spin:0.05, emi:0.16 });
+  texPlanet('pMoon', 2.4, [9, 17, -56], { spin:0.01, emi:0.14 });
+  if(!lowfx) texPlanet('pNep', 3.2, [-42, -3, -80], { spin:0.03, emi:0.18, atm:0x3a6ad0 });
   // distant landmarks (Kenney Space Kit, CC0): a cargo freighter cruising + a station hangar, hazed by fog
   modelBand('freighter', 1, [{ x:-16, y:8.5, z:-52, s:10, rx:0.08, ry:0.7, phase:0 }],
     { speedMul:0.10, minX:-72, maxX:72, env:0.5 });
@@ -1232,27 +1318,65 @@ function scenerySpace(L){
   bgLayer(assets.tex.bgSGalaxy,   -92, 40, W.groundY-9,  0.0028, 0xffffff);
   bgLayer(assets.tex.bgSPlanets,  -66, 30, W.groundY-3,  0.0052, 0xffffff);
 
-  // ---- hero planet: a large glowing sphere with a soft atmosphere rim, far off to one side ----
-  (function(){
-    const pg=new THREE.Mesh(new THREE.SphereGeometry(9.5, 36, 26),
-      stdMat({ color:C(0x3a5a8c), roughness:0.9, metalness:0.0, emissive:C(0x18305a), emissiveIntensity:0.55 }));
-    pg.position.set(-23, 13, -80); themeRoot.add(pg); trackDispose(pg.geometry, pg.material);
-    const atm=new THREE.Mesh(new THREE.SphereGeometry(10.4, 36, 26),
-      new THREE.MeshBasicNodeMaterial({ color:C(0x6fb0ff), transparent:true, opacity:0.16, side:THREE.BackSide, depthWrite:false, blending:THREE.AdditiveBlending }));
-    atm.position.copy(pg.position); themeRoot.add(atm); trackDispose(atm.material);
-    animators.push((dt)=>{ pg.rotation.y += dt*0.02; });
+  // ---- MARS TERRAIN FLOOR (ambientCG Rock030, CC0): a real textured ground that scrolls under the bird ----
+  (function marsFloor(){
+    const tex=assets.tex.marsGround, nrm=assets.tex.marsGroundN;
+    const RX=20, RY=7;
+    if(tex){ tex.wrapS=tex.wrapT=THREE.RepeatWrapping; tex.repeat.set(RX,RY); }
+    if(nrm){ nrm.wrapS=nrm.wrapT=THREE.RepeatWrapping; nrm.repeat.set(RX,RY); }
+    const geo=new THREE.PlaneGeometry(240, 84, 1, 1);
+    const mat=new THREE.MeshStandardNodeMaterial({ map:tex||null, normalMap:nrm||null,
+      color:C(0xb05636), roughness:0.97, metalness:0.0 });     // grey rock * Mars-red = ruddy regolith
+    if(nrm) mat.normalScale=new THREE.Vector2(1.2,1.2);
+    const m=new THREE.Mesh(geo, mat); m.rotation.x=-Math.PI/2; m.position.set(0, W.groundY, -6); m.receiveShadow=true;
+    themeRoot.add(m); trackDispose(geo, mat);
+    // scroll the texture with the world speed to sell forward motion over the surface
+    animators.push((dt)=>{ const k=dt*speed*0.012; if(tex) tex.offset.x-=k; if(nrm) nrm.offset.x-=k; });
+  })();
+  // boulders, crystals + defence turrets resting ON the Mars surface (scroll with the ground)
+  ['astRock','astRockB','crystalA'].forEach((k)=>{
+    modelBand(k, 1, spread(lowfx?4:7, -34,34, (it)=>{ it.y=W.groundY+rrange(0.0,0.5); it.z=rrange(-8,5); it.s=rrange(0.9,2.4); it.rx=rrange(-0.15,0.15); it.ry=rrange(0,6.28); }),
+      { speedMul:1.0, minX:-36, maxX:36, spin:0, env:0.5 });
+  });
+  modelBand('turret', 1, spread(2,-34,34,(it)=>{ it.y=W.groundY+0.15; it.z=rrange(-6,3); it.s=rrange(1.0,1.6); it.ry=rrange(0,6.28); }),
+    { speedMul:1.0, minX:-36, maxX:36, env:0.5 });
+  modelBand('pebbleS', 1, spread(lowfx?6:10,-34,34,(it)=>{ it.y=W.groundY+rrange(0,0.3); it.z=rrange(-8,5); it.s=rrange(0.5,1.2); it.rx=rrange(0,6.28); it.ry=rrange(0,6.28); }),
+    { speedMul:1.0, minX:-36, maxX:36, env:0.5 });
+
+  // ---- launching rockets (Kenney Space Kit): two stacked rockets drifting up with a thruster glow ----
+  (function rockets(){
+    const cfgs=[{ x:-32, z:-60, size:10, parts:[{key:'rkBase',y:0},{key:'rkTop',y:1.6}] },
+                { x:36,  z:-70, size:8,  parts:[{key:'rkSides',y:0},{key:'rkTop',y:1.0}] }];
+    const list=[];
+    for(const c of cfgs){ const g=rocketGroup(c.parts, c.size, { env:0.5 }); if(!g) continue;
+      const base=rrange(-6,0); g.position.set(c.x, base, c.z); g.rotation.y=rrange(-0.5,0.5); themeRoot.add(g);
+      const fm=new THREE.SpriteNodeMaterial({ map:assets.tex.smoke, color:C(0xffb24a), transparent:true, opacity:0.0, depthWrite:false, blending:THREE.AdditiveBlending });
+      const flame=new THREE.Sprite(fm); flame.scale.set(c.size*0.42, c.size*0.8, 1); flame.position.set(0,-c.size*0.05,0); g.add(flame); trackDispose(fm);
+      list.push({ g, flame, base, spd:rrange(1.4,2.6), top:24 });
+    }
+    if(list.length) animators.push((dt,t)=>{ for(const r of list){ r.g.position.y+=r.spd*dt;
+      r.flame.material.opacity=0.42+Math.sin(t*26+r.base)*0.18;
+      if(r.g.position.y>r.top) r.g.position.y=r.base-3; } });
   })();
 
-  // ---- asteroid-belt FLOOR: a dense drifting belt you skim over (replaces the flat ground) ----
-  ['astRock','astRockB','meteor','crystalA','crystalB'].forEach((k,i)=>{
-    modelBand(k, 1, spread(lowfx?5:8, -34,34, (it)=>{ it.y=rrange(-15.5,-8.5); it.z=rrange(-9,3); it.s=rrange(0.7,2.0); it.rx=rrange(0,6.28); it.ry=rrange(0,6.28); }),
-      { speedMul:1.0, minX:-36, maxX:36, spin:0.3+i*0.06, env:0.5 });
-  });
-  // deeper, dimmer belt for parallax depth (fogged back)
-  modelBand('pebbleS', 1, spread(lowfx?6:10, -34,34, (it)=>{ it.y=rrange(-18,-11); it.z=rrange(-26,-13); it.s=rrange(0.8,1.8); it.rx=rrange(0,6.28); it.ry=rrange(0,6.28); }),
-    { speedMul:0.55, minX:-36, maxX:36, spin:0.22, env:0.4 });
-  modelBand('astRockB', 1, spread(lowfx?3:6, -34,34, (it)=>{ it.y=rrange(-17,-10); it.z=rrange(-24,-13); it.s=rrange(1.0,2.2); it.rx=rrange(0,6.28); it.ry=rrange(0,6.28); }),
-    { speedMul:0.5, minX:-36, maxX:36, spin:0.18, env:0.4 });
+  // ---- far station complex: structure + landing platform + big dish + monorail (slow-parallax landmarks) ----
+  modelBand('structure', 1, [{ x:42, y:5, z:-74, s:15, ry:-0.6, phase:0 }], { speedMul:0.06, minX:-94, maxX:94, env:0.5 });
+  modelBand('platform',  1, [{ x:-46, y:-5, z:-76, s:17, ry:0.4, phase:0 }], { speedMul:0.055, minX:-96, maxX:96, env:0.5 });
+  modelBand('dishLarge', 1, [{ x:16, y:12, z:-68, s:7, ry:0.5, rx:0.22, phase:0 }], { speedMul:0.08, minX:-82, maxX:82, env:0.5 });
+  modelBand('monorail',  1, [{ x:-12, y:-7, z:-58, s:9, ry:0.5, phase:0 }], { speedMul:0.12, minX:-72, maxX:72, env:0.5 });
+  if(!lowfx) modelBand('stationB', 1, [{ x:-30, y:10, z:-80, s:12, ry:0.6, phase:0 }], { speedMul:0.05, minX:-94, maxX:94, env:0.5 });
+
+  // ---- extra ship traffic: a far freighter + mid-field miner / racer / speeder streaking past ----
+  modelBand('freighterB', 1, spread(1,-44,44,(it)=>{ it.y=rrange(7,12); it.z=rrange(-48,-36); it.s=8.5; it.ry=0.6; it.rx=0.05; }),
+    { speedMul:0.16, minX:-74, maxX:74, env:0.55 });
+  modelBand('miner', 1, spread(lowfx?1:2,-34,34,(it)=>{ it.y=rrange(-3,8); it.z=rrange(-22,-10); it.s=rrange(1.4,2.0); it.ry=Math.PI*0.5; it.rx=0.08; }),
+    { speedMul:0.85, minX:-36, maxX:36, env:0.55 });
+  if(!lowfx){
+    modelBand('racer', 1, spread(2,-34,34,(it)=>{ it.y=rrange(-2,9); it.z=rrange(-18,-6); it.s=rrange(1.0,1.4); it.ry=Math.PI*0.5; it.rx=0.05; }),
+      { speedMul:1.5, minX:-36, maxX:36, env:0.6 });
+    modelBand('speederA', 1, spread(1,-34,34,(it)=>{ it.y=rrange(0,9); it.z=rrange(-16,-6); it.s=rrange(1.0,1.4); it.ry=Math.PI*0.5; it.rx=0.08; }),
+      { speedMul:1.3, minX:-36, maxX:36, env:0.6 });
+  }
 }
 function sceneryOcean(L){
   // god-ray light shafts (additive sprites from top)
@@ -1422,15 +1546,33 @@ function updateFX(dt){
 /* ---- WebAudio juice: synthesized SFX + a subtle arpeggio loop (zero asset payload) ---- */
 const audio = (()=>{
   let ctx=null, master=null, musicGain=null, muted=false, musicTimer=null, mi=0;
+  const buffers={};                                            // decoded downloaded clips
+  let musicSrc=null, musicWanted=false, decoded=false;
+  const MUSIC_VOL=0.34;                                         // soft bed under master 0.55
   try { if(localStorage.getItem('flappy3d_mute')==='1') muted=true; } catch(e){}
   function ensure(){
     if(ctx) return;
     const AC=window.AudioContext||window.webkitAudioContext; if(!AC) return;
     ctx=new AC();
     master=ctx.createGain(); master.gain.value=muted?0:0.55; master.connect(ctx.destination);
-    musicGain=ctx.createGain(); musicGain.gain.value=0.10; musicGain.connect(master);
+    musicGain=ctx.createGain(); musicGain.gain.value=MUSIC_VOL; musicGain.connect(master);
+    decodeAll();
   }
-  function resume(){ ensure(); if(ctx&&ctx.state==='suspended') ctx.resume(); }
+  // decode the downloaded mp3 bytes once the context exists (decodeAudioData detaches, so copy)
+  function decodeAll(){
+    if(decoded||!ctx) return; decoded=true;
+    for(const k in assets.audioRaw){ const raw=assets.audioRaw[k]; if(!raw) continue;
+      try{ ctx.decodeAudioData(raw.slice(0),
+        b=>{ buffers[k]=b; if(k==='music'&&musicWanted&&!muted) startMusicBuffer(); }, ()=>{}); }catch(e){}
+    }
+  }
+  function sample(key,{gain=0.8,rate=1,dest=null}={}){       // one-shot downloaded clip
+    if(!ctx||muted||!buffers[key]) return null;
+    const s=ctx.createBufferSource(); s.buffer=buffers[key]; s.playbackRate.value=rate;
+    const g=ctx.createGain(); g.gain.value=gain; s.connect(g).connect(dest||master);
+    try{ s.start(); }catch(e){} return s;
+  }
+  function resume(){ ensure(); if(ctx&&ctx.state==='suspended') ctx.resume(); startMusic(); }
   function tone({freq=440,type='sine',dur=0.15,gain=0.3,slideTo=null,delay=0,dest=null}){
     if(!ctx||muted) return; const t0=ctx.currentTime+delay;
     const o=ctx.createOscillator(), g=ctx.createGain(); o.type=type; o.frequency.setValueAtTime(freq,t0);
@@ -1448,8 +1590,16 @@ const audio = (()=>{
     const g=ctx.createGain(); g.gain.value=gain;
     src.connect(f).connect(g).connect(master); src.start(t0);
   }
-  const PENTA=[0,3,5,7,10,12];                                 // minor pentatonic, gentle ambient bed
-  function startMusic(){
+  // looping downloaded bed: plays through menu + gameplay, ducked on death
+  function startMusicBuffer(){
+    if(!ctx||!buffers.music||musicSrc) return;
+    musicGain.gain.cancelScheduledValues(ctx.currentTime);
+    musicGain.gain.setTargetAtTime(MUSIC_VOL, ctx.currentTime, 0.6);
+    musicSrc=ctx.createBufferSource(); musicSrc.buffer=buffers.music; musicSrc.loop=true;
+    musicSrc.connect(musicGain); try{ musicSrc.start(); }catch(e){}
+  }
+  const PENTA=[0,3,5,7,10,12];                                 // minor pentatonic — procedural fallback only
+  function startProcedural(){
     if(musicTimer||muted) return;
     musicTimer=setInterval(()=>{ if(!ctx||muted||state!=='PLAYING'||document.hidden) return;
       const semi=PENTA[mi%PENTA.length]+(mi%12===0?12:0); mi++;
@@ -1458,14 +1608,29 @@ const audio = (()=>{
       if(mi%2===0) tone({freq:f/2,type:'sine',dur:0.7,gain:0.16,dest:musicGain});
     }, 480);
   }
-  function stopMusic(){ clearInterval(musicTimer); musicTimer=null; }
+  function startMusic(){
+    musicWanted=true; if(muted||!ctx) return;
+    if(buffers.music) startMusicBuffer();
+    else if(!musicSrc) startProcedural();                      // graceful fallback if the mp3 didn't load
+  }
+  function duckMusic(){ if(musicGain&&ctx){ musicGain.gain.cancelScheduledValues(ctx.currentTime); musicGain.gain.setTargetAtTime(0.0001, ctx.currentTime, 0.08); } }
+  function unduckMusic(){ if(musicGain&&ctx&&!muted){ musicGain.gain.cancelScheduledValues(ctx.currentTime); musicGain.gain.setTargetAtTime(MUSIC_VOL, ctx.currentTime, 0.5); } }
+  function stopMusic(){ musicWanted=false; if(musicSrc){ try{musicSrc.stop()}catch(e){} musicSrc=null; } clearInterval(musicTimer); musicTimer=null; }
   document.addEventListener('visibilitychange',()=>{ if(ctx){ if(document.hidden) ctx.suspend&&ctx.suspend(); else if(!muted) ctx.resume&&ctx.resume(); } });
   return {
-    ensure, resume, startMusic, stopMusic,
+    ensure, resume, startMusic, stopMusic, unduckMusic,
     flap(){ tone({freq:520,slideTo:760,type:'triangle',dur:0.12,gain:0.16}); noise({dur:0.09,gain:0.05,lp:1900}); },
     score(st=0){ const base=660*Math.pow(2,Math.min(st,10)/12); tone({freq:base,slideTo:base*1.5,type:'sine',dur:0.16,gain:0.20}); },
-    crash(){ tone({freq:180,slideTo:55,type:'sawtooth',dur:0.45,gain:0.28}); noise({dur:0.4,gain:0.33,lp:680}); },
-    setMuted(m){ muted=m; if(master) master.gain.value=m?0:0.55; if(m) stopMusic(); else { resume(); startMusic(); }
+    // death (Mario-style): silence the bed, play the downloaded descending jingle over a soft thud
+    crash(){ duckMusic();
+      const j=sample('death',{gain:0.6});
+      if(j){ noise({dur:0.22,gain:0.16,lp:600}); }
+      else { tone({freq:180,slideTo:55,type:'sawtooth',dur:0.45,gain:0.28}); noise({dur:0.4,gain:0.33,lp:680}); }
+    },
+    uiClick(){ if(!sample('click',{gain:0.5})) tone({freq:660,type:'sine',dur:0.07,gain:0.12}); },
+    uiConfirm(){ unduckMusic(); if(!sample('confirm',{gain:0.55})) tone({freq:720,slideTo:980,type:'triangle',dur:0.12,gain:0.16}); },
+    uiToggle(){ if(!sample('toggle',{gain:0.5})) tone({freq:520,type:'square',dur:0.08,gain:0.10}); },
+    setMuted(m){ muted=m; if(master) master.gain.value=m?0:0.55; if(m) stopMusic(); else { resume(); }
       try{ localStorage.setItem('flappy3d_mute', m?'1':'0'); }catch(e){} return muted; },
     isMuted(){ return muted; }
   };
@@ -1537,7 +1702,7 @@ function startRun(){
   state='PLAYING'; resetRun();
   readyPanel.classList.add('hide'); overPanel.classList.add('hide');
   scoreEl.classList.add('show'); tipEl.classList.add('show');
-  bird.flap(); audio.resume(); audio.flap(); audio.startMusic();
+  bird.flap(); audio.resume(); audio.flap(); audio.startMusic(); audio.unduckMusic();
   setTimeout(()=>tipEl.classList.remove('show'), 1400);
 }
 function die(){
@@ -1652,7 +1817,7 @@ function buildThemeUI(){
   });
 }
 function syncThemeUI(){ document.querySelectorAll('[data-theme]').forEach(b=>b.classList.toggle('sel', b.dataset.theme===currentTheme)); }
-function chooseTheme(t){ if(state!=='READY'&&state!=='OVER') return; applyTheme(t); syncThemeUI(); }
+function chooseTheme(t){ if(state!=='READY'&&state!=='OVER') return; audio.resume(); audio.uiClick(); applyTheme(t); syncThemeUI(); }
 
 // difficulty selector (mirrors the theme trio; only switchable when not in a live run)
 function buildDifficultyUI(){
@@ -1668,14 +1833,15 @@ function syncDifficultyUI(){ document.querySelectorAll('[data-diff]').forEach(b=
 function chooseDifficulty(d){
   if(state==='PLAYING'||state==='DEAD') return;             // lock during a live run
   if(!DIFFS[d]) return;
+  audio.resume(); audio.uiClick();
   currentDifficulty=d; try{ localStorage.setItem('flappy3d_diff', d); }catch(e){}
   syncDifficultyUI();
 }
 
-$('playBtn').addEventListener('pointerdown', e=>{ e.stopPropagation(); audio.resume(); startRun(); });
-$('againBtn').addEventListener('pointerdown', e=>{ e.stopPropagation(); audio.resume(); startRun(); });
+$('playBtn').addEventListener('pointerdown', e=>{ e.stopPropagation(); audio.resume(); audio.uiConfirm(); startRun(); });
+$('againBtn').addEventListener('pointerdown', e=>{ e.stopPropagation(); audio.resume(); audio.uiConfirm(); startRun(); });
 $('muteBtn').addEventListener('pointerdown', e=>{ e.stopPropagation(); audio.ensure();
-  const m=audio.setMuted(!audio.isMuted()); $('muteBtn').textContent = m?'🔇':'🔊'; });
+  const m=audio.setMuted(!audio.isMuted()); audio.uiToggle(); $('muteBtn').textContent = m?'🔇':'🔊'; });
 
 /* ============================================================ *
  *  9b. POST-PROCESSING (bloom; skipped under lowfx unless ?fullfx)

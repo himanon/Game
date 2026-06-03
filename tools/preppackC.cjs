@@ -9,12 +9,16 @@ const DEST=path.join(__dirname,'..','assets','models','space');
 fs.mkdirSync(DEST,{recursive:true});
 
 const CHOSEN=[
-  // landmarks: drifting freighter + distant station
-  'craft_cargoA','hangar_largeA',
+  // pillar cap candidates (sci-fi modules)
+  'satelliteDish_detailed','machine_generatorLarge',
+  // ships + craft (multi-layer background traffic)
+  'craft_cargoA','craft_cargoB','craft_miner','craft_racer','craft_speederA','craft_speederB',
+  // stations / structures / platforms (far + mid background)
+  'hangar_largeA','hangar_roundB','structure_detailed','platform_large','monorail_trainPassenger','turret_double','satelliteDish','satelliteDish_large',
+  // rockets (assembled background props + launches)
+  'rocket_baseA','rocket_sidesA','rocket_topA',
   // asteroid belt: meteors + rocks + crystal pops + small debris
-  'meteor_detailed','rock_largeA','rock_largeB','rocks_smallA','rock_crystalsLargeA','rock_crystalsLargeB',
-  // debris: satellite + drifting speeder
-  'satelliteDish','craft_speederB'
+  'meteor_detailed','rock_largeA','rock_largeB','rocks_smallA','rock_crystalsLargeA','rock_crystalsLargeB'
 ];
 
 let n=0;

@@ -1,0 +1,4 @@
+AUDIO CREDITS
+- UI sound effects (click/toggle/confirm): Kenney "Interface Sounds" - CC0 1.0 (public domain), www.kenney.nl
+- Death jingle (death.mp3): Kenney "Music Jingles" (8-Bit/NES) - CC0 1.0, www.kenney.nl
+- Background music (menu_loop.mp3): "Ossuary 5 - Rest" by Kevin MacLeod (incompetech.com) - CC BY 4.0 (https://creativecommons.org/licenses/by/4.0/). Trimmed/encoded for web.
