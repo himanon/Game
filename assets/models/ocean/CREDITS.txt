@@ -1,0 +1,5 @@
+Pirate Kit by Kenney (www.kenney.nl)
+License: CC0 1.0 Universal (Public Domain) - https://creativecommons.org/publicdomain/zero/1.0/
+Free for personal, educational and commercial use. Crediting Kenney is appreciated (not required).
+Curated subset used as ocean pillar caps (chest, barrel, bottle-large, rocks-c) — sunken treasure on the reef;
+self-contained glTF-binary (.glb) variants used as-is. Fetch via tools/fetchpackD.cjs.

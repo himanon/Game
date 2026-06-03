@@ -1,0 +1,5 @@
+Graveyard Kit by Kenney (www.kenney.nl)
+License: CC0 1.0 Universal (Public Domain) - https://creativecommons.org/publicdomain/zero/1.0/
+Free for personal, educational and commercial use. Crediting Kenney is appreciated (not required).
+Curated subset used as ruins pillar caps (pillar-obelisk, urn-round, pillar-square, gravestone-decorative);
+self-contained glTF-binary (.glb) variants used as-is. Fetch via tools/fetchpackD.cjs.

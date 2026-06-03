@@ -427,7 +427,12 @@ async function preload(){
     loadModel('supports_high','supports','space','glb'),
     loadModel('rover','rover','space','glb'), loadModel('astronautA','astroA','space','glb'), loadModel('astronautB','astroB','space','glb'),
     loadModel('hangar_roundGlass','domeStation','space','glb'), loadModel('craft_speederC','speederC','space','glb'),
-    // Mars ground (ambientCG Rock030, CC0) + real planet maps (planetpixelemporium, free)
+    // pillar-cap models for the non-space themes (Kenney CC0): ruins = graveyard stone, ocean = sunken treasure
+    loadModel('pillar-obelisk','rcObelisk','ruins','glb'), loadModel('urn-round','rcUrn','ruins','glb'),
+    loadModel('pillar-square','rcPillar','ruins','glb'), loadModel('gravestone-decorative','rcStone','ruins','glb'),
+    loadModel('chest','ocChest','ocean','glb'), loadModel('barrel','ocBarrel','ocean','glb'),
+    loadModel('bottle-large','ocBottle','ocean','glb'), loadModel('rocks-c','ocRocks','ocean','glb'),
+    // Mars ground (ambientCG Ground025, CC0) + real planet maps (planetpixelemporium, free)
     loadLocalTex('textures/space/mars_color.jpg','marsGround',{repeat:true,repeatY:true,aniso:true}),
     loadLocalTex('textures/space/mars_normal.jpg','marsGroundN',{linear:true,repeat:true,repeatY:true,aniso:true}),
     loadLocalTex('textures/space/jupitermap.jpg','pJup'),
@@ -864,6 +869,7 @@ function modelBand(key, targetSize, items, opts={}){
  * ============================================================ */
 const PIPE_POOL = 7;
 let pipes = [];
+let capSpinners = [];   // space cap model groups that slowly rotate (radar scan / station spin)
 let pipeMats = null;
 
 function makePipeMaterials(theme){
@@ -926,14 +932,18 @@ function buildCapDeco(theme, mat, isTop){
 }
 
 const TOWER_H=5.5;   // medieval-tower height for hills pipes (sized so its half-width ~= W.pipeW)
-const SPACE_CAP_H=1.45;  // satellite-dish cap height for space pipes (Kenney Space Kit, CC0)
+const SPACE_CAP_H=1.9;   // space module cap height (height-fit so wide dishes stand proud, not flat)
+const OCEAN_CAP_H=1.7;   // sunken-treasure cap height for ocean pipes (Kenney Pirate Kit, CC0)
+const RUINS_CAP_H=2.1;   // graveyard-stone cap height for ruins pipes (Kenney Graveyard Kit, CC0)
 // a full model facing the gap: upright on the bottom pipe, flipped on the top so the
 // "business end" (battlements, which sits at y=h) always points into the gap.
-function buildModelCap(prims, isTop, h){
+function buildModelCap(prims, isTop, h, protrude=0){
   const g=new THREE.Group();
   for(const p of (prims||[])){ const m=new THREE.Mesh(p.geo, p.mat); m.castShadow=true; m.receiveShadow=true; g.add(m); }
-  if(isTop){ g.rotation.x=Math.PI; g.position.y=h; }   // flip so the top end faces DOWN into the gap
-  else { g.position.y=-h; }                            // upright, top end at the gap edge facing UP
+  // bulk sits on the pillar side; the business end pokes `protrude` into the gap so the model reads
+  // as a visible crown (kept within the cap-lip collision, so the playable gap is unchanged).
+  if(isTop){ g.rotation.x=Math.PI; g.position.y=h-protrude; }   // flip so the top end faces DOWN into the gap
+  else { g.position.y=protrude-h; }                             // upright, top end pokes UP into the gap
   return g;
 }
 // space pipe cap: a metal collar + a bright pulsing reactor core that glows into the gap
@@ -965,11 +975,13 @@ function makePipeSegment(theme, isTop, capPrims){
     for(let i=0;i<6;i++){ const a=i/6*6.28; const n=new THREE.Mesh(new THREE.SphereGeometry(0.085,6,5), pipeMats.core);
       n.position.set(Math.cos(a)*r*1.04, dir*0.02, Math.sin(a)*r*1.04); capGroup.add(n); trackDispose(n.geometry); }
     const cp = capPrims || _pgeo.capV0;                             // varied space module per pillar (dish/antenna/dome/reactor)
-    if(cp) capGroup.add(buildModelCap(cp, isTop, SPACE_CAP_H));
+    if(cp){ const mc=buildModelCap(cp, isTop, SPACE_CAP_H, 0.4); capGroup.add(mc); capSpinners.push(mc); }  // slow scan rotation
     else capGroup.add(buildReactorCap(isTop));                      // fallback if no cap model loaded
   } else {
     const cap=new THREE.Mesh(_pgeo.cap, pipeMats.cap); cap.castShadow=true; capGroup.add(cap);
     const deco=buildCapDeco(theme, pipeMats.deco, isTop); capGroup.add(deco);
+    // real 3D model crown per pillar (ocean = sunken treasure, ruins = graveyard stone)
+    if(capPrims) capGroup.add(buildModelCap(capPrims, isTop, theme==='ocean'?OCEAN_CAP_H:RUINS_CAP_H, 0.5));
   }
   seg.add(shaft, capGroup);
   return { seg, shaft, capGroup };
@@ -991,6 +1003,7 @@ function buildPipePair(theme, idx){
 }
 function rebuildPipes(theme){
   pipes.forEach(p=>p.grp.removeFromParent());
+  capSpinners=[];
   // dispose plain geometries; the tower prim geos live in an array, dispose them separately
   Object.values(_pgeo).forEach(g=>{ if(g&&g.dispose) g.dispose(); else if(Array.isArray(g)) g.forEach(p=>p.geo&&p.geo.dispose()); });
   pipes=[];
@@ -1004,14 +1017,16 @@ function rebuildPipes(theme){
   if(theme==='hills'){
     if(assets.glb.towerPipe) _pgeo.towerPrims=prepModelPrims(assets.glb.towerPipe, TOWER_H, { env:0.4, rough:0.92 });
   }
-  if(theme==='space'){
-    // a MIX of space-module caps; each stored under its own key so the array-dispose branch above frees it
+  // per-theme MIX of real 3D model caps cycled per pillar; each variant stored under its own key so
+  // the array-dispose branch above frees it. height-fit makes wide models stand proud, not squashed.
+  const capMix=({
+    space:{ h:SPACE_CAP_H, list:[['capDish',{env:0.6,rough:0.45}],['antenna',{env:0.6,rough:0.5}],['domeStation',{env:0.6,rough:0.3}],['generator',{env:0.6,rough:0.5}]] },
+    ocean:{ h:OCEAN_CAP_H, list:[['ocChest',{env:0.5,rough:0.6}],['ocBarrel',{env:0.5,rough:0.7}],['ocBottle',{env:0.5,rough:0.4}],['ocRocks',{env:0.5,rough:0.85}]] },
+    ruins:{ h:RUINS_CAP_H, list:[['rcObelisk',{env:0.4,rough:0.92}],['rcUrn',{env:0.4,rough:0.9}],['rcPillar',{env:0.4,rough:0.92}],['rcStone',{env:0.4,rough:0.9}]] },
+  })[theme];
+  if(capMix){
     const variants=[];
-    const add=(key,opts)=>{ if(assets.glb[key]) variants.push(prepModelPrims(assets.glb[key], SPACE_CAP_H, opts)); };
-    add('capDish',     { env:0.6, rough:0.45 });   // radar dish
-    add('antenna',     { env:0.6, rough:0.5  });   // wireless comms antenna
-    add('domeStation', { env:0.6, rough:0.3  });   // glass habitat dome
-    add('generator',   { env:0.6, rough:0.5  });   // reactor module
+    capMix.list.forEach(([key,opts])=>{ if(assets.glb[key]) variants.push(prepModelPrims(assets.glb[key], capMix.h, Object.assign({fit:'height'},opts))); });
     variants.forEach((v,i)=>{ _pgeo['capV'+i]=v; });
     _pgeo.capN=variants.length;
   }
@@ -1380,7 +1395,7 @@ function scenerySpace(L){
   bgLayer(assets.tex.bgSGalaxy,   -92, 40, W.groundY-9,  0.0028, 0xffffff);
   bgLayer(assets.tex.bgSPlanets,  -66, 30, W.groundY-3,  0.0052, 0xffffff);
 
-  // ---- MARS TERRAIN: a real contoured 3D surface (ambientCG Rock030, CC0) replacing the flat plane ----
+  // ---- MARS TERRAIN: a real contoured 3D surface (ambientCG Ground025 grain + regolith shader) ----
   buildMarsTerrain();
   // real 3D crater + boulder features sitting ON the surface (scroll at world speed to sell motion)
   modelBand('crater', 2.5, spread(lowfx?3:5,-36,36,(it)=>{ it.y=W.groundY+0.02; it.z=rrange(-12,4); it.s=rrange(1.6,3.2); it.ry=rrange(0,6.28); }),
@@ -1593,6 +1608,7 @@ function updateScenery(dt, t, moving){
   windGust = 1 + Math.sin(t*0.6)*0.45 + Math.sin(t*1.7+1.3)*0.2;   // coherent gusts
   for(const b of bands) b.update(dt, sp, t, moving);
   for(const a of animators) a(dt, t, moving);
+  for(const g of capSpinners) g.rotation.y += dt*0.5;   // space pillar caps slowly scan (empty for other themes)
 }
 
 /* ---- FX particle burst (feathers / sparks on death + score) ---- */
