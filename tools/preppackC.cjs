@@ -10,7 +10,7 @@ fs.mkdirSync(DEST,{recursive:true});
 
 const CHOSEN=[
   // pillar cap candidates (sci-fi modules)
-  'satelliteDish_detailed','machine_generatorLarge',
+  'satelliteDish_detailed',
   // ships + craft (multi-layer background traffic)
   'craft_cargoA','craft_cargoB','craft_miner','craft_racer','craft_speederA','craft_speederB',
   // stations / structures / platforms (far + mid background)
@@ -18,7 +18,15 @@ const CHOSEN=[
   // rockets (assembled background props + launches)
   'rocket_baseA','rocket_sidesA','rocket_topA',
   // asteroid belt: meteors + rocks + crystal pops + small debris
-  'meteor_detailed','rock_largeA','rock_largeB','rocks_smallA','rock_crystalsLargeA','rock_crystalsLargeB'
+  'meteor_detailed','rock_largeA','rock_largeB','rocks_smallA','rock_crystalsLargeA','rock_crystalsLargeB',
+  // Mars surface: real 3D terrain features (craters) embedded in the contoured ground
+  'crater','craterLarge',
+  // grounded Mars colony: base buildings, comms antenna, gate, chimney, support pylons
+  'machine_generator','machine_wireless','gate_complex','chimney_detailed','supports_high',
+  // foreground life: rover + astronauts (scale/liveliness)
+  'rover','astronautA','astronautB',
+  // glass-dome station (sky landmark) + dome pillar-cap variant + extra ship for the squadron
+  'hangar_roundGlass','craft_speederC'
 ];
 
 let n=0;
