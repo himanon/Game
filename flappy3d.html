@@ -136,7 +136,7 @@ import { clone as skeletonClone } from 'three/addons/utils/SkeletonUtils.js';
 import {
   Fn, vec2, vec3, vec4, float, uniform, positionLocal, positionWorld, normalLocal, normalWorld,
   cameraPosition, time, mix, clamp, smoothstep, step, pow, sin, cos, abs, max, min, dot, normalize,
-  mx_noise_float, mx_fractal_noise_float, uv, length, fract, mul, add, sub, oneMinus, exp, screenUV
+  mx_noise_float, mx_fractal_noise_float, uv, length, fract, mul, add, sub, oneMinus, exp, screenUV, texture
 } from 'three/tsl';
 import { pass } from 'three/tsl';
 import { bloom } from 'three/addons/tsl/display/BloomNode.js';
@@ -219,7 +219,7 @@ const THEMES = {
            pipe:{ color:0x8a8f7a, rough:0.92, metal:0.0, emissive:0x000000, emI:0 },
            accent:0xffe07a },
   space: { hdr:'royal_esplanade_1k.hdr', bg:0x0a0a1f, blur:0.0, fog:0x140e2e, fogD:0.0045,
-           sun:0xaecbff, sunI:1.6, sunPos:[ 7, 6, 4 ], amb:0x332b5c, ambI:0.72,
+           sun:0xcfe0ff, sunI:2.3, sunPos:[ 7, 6, 4 ], amb:0x4a4270, ambI:0.85,
            pipe:{ color:0x4a4660, rough:0.5, metal:0.7, emissive:0x6a3bff, emI:1.4 },
            accent:0x8f7bff },
   ocean: { hdr:'quarry_01_1k.hdr', bg:0x0a4d6e, blur:0.32, fog:0x0c5f86, fogD:0.03,
@@ -686,23 +686,34 @@ function marsHeight(wx,wz){
   const lane = Math.exp(-Math.pow((wx+1.5)/7,2)) * Math.exp(-Math.pow((wz-2)/9,2));   // flatten the play lane
   return h * back * (1-0.9*lane) * 2.0;
 }
-// contoured 3D Mars terrain (mirrors buildHillsTerrain): real undulating mesh + Rock030 texture,
-// vertex colours add height shading, mat.color carries the ruddy regolith hue
+// contoured 3D Mars terrain (mirrors buildHillsTerrain): real undulating mesh whose albedo is a
+// bright rusty-regolith TSL shader (the shipped texture is a dark grey rock, so it is sampled only
+// for fine grain, never as raw albedo — that is why the old version rendered black). The normal map
+// still drives surface relief, and a faint warm emissive lifts shadowed dunes off pure black.
 function buildMarsTerrain(){
   const sw=caps.lowfx?80:160, sd=caps.lowfx?60:120;
   const geo=new THREE.PlaneGeometry(400,300,sw,sd);
-  const p=geo.attributes.position, n=p.count, col=new Float32Array(n*3);
-  const lo=C(0x9a9a9a), hi=C(0xffffff);                              // brightness ramp (hue comes from mat.color)
-  for(let i=0;i<n;i++){ const wx=p.getX(i), wz=-p.getY(i); const h=marsHeight(wx,wz);
-    p.setZ(i,h); const t=clampf(h/3.5,0,1);
-    col[i*3]=lerp(lo.r,hi.r,t); col[i*3+1]=lerp(lo.g,hi.g,t); col[i*3+2]=lerp(lo.b,hi.b,t); }
-  p.needsUpdate=true; geo.computeVertexNormals(); geo.setAttribute('color', new THREE.BufferAttribute(col,3));
-  const map=assets.tex.marsGround.clone(); map.wrapS=map.wrapT=THREE.RepeatWrapping; map.repeat.set(70,52); map.needsUpdate=true;
+  const p=geo.attributes.position, n=p.count;
+  for(let i=0;i<n;i++){ const wx=p.getX(i), wz=-p.getY(i); p.setZ(i, marsHeight(wx,wz)); }
+  p.needsUpdate=true; geo.computeVertexNormals();
   const nrm=assets.tex.marsGroundN.clone(); nrm.wrapS=nrm.wrapT=THREE.RepeatWrapping; nrm.repeat.set(90,68); nrm.needsUpdate=true;
-  const mat=stdMat({ vertexColors:true, roughness:0.97, metalness:0.0 });
-  mat.color=C(0xb05636); mat.map=map; mat.normalMap=nrm; mat.normalScale=new THREE.Vector2(1.0,1.0);
+  const mat=stdMat({ roughness:0.96, metalness:0.0 });
+  mat.normalMap=nrm; mat.normalScale=new THREE.Vector2(0.8,0.8);
+  const map=assets.tex.marsGround;
+  mat.colorNode = Fn(()=>{
+    const grain = texture(map, uv().mul(vec2(46,34)));                       // Ground025 pebble/crack detail
+    const lum = grain.r.mul(0.4).add(grain.g.mul(0.4)).add(grain.b.mul(0.2));
+    const n1 = mx_noise_float(positionWorld.mul(0.5)).mul(0.5).add(0.5);     // broad regolith patches
+    const n2 = mx_noise_float(positionWorld.mul(3.2)).mul(0.5).add(0.5);     // dust mottle
+    const hgt = clamp(positionWorld.y.sub(float(W.groundY)).mul(0.22), 0, 1);// ridges catch the light
+    const dark = cv(0x6f2f17), lite = cv(0xd08a52);                          // iron-oxide shadow → tan crest
+    const t = clamp(n1.mul(0.4).add(hgt.mul(0.3)).add(lum.mul(0.55)).sub(0.05), 0, 1);
+    const tone = mix(dark, lite, t);
+    return tone.mul(lum.mul(1.1).add(0.45)).mul(mix(float(0.9), float(1.1), n2));  // photographic grain shades the ruddy tone
+  })();
+  mat.emissiveNode = cv(0x57240f).mul(0.07);                                 // faint warm shadow lift
   const mesh=new THREE.Mesh(geo,mat); mesh.rotation.x=-Math.PI/2; mesh.position.set(0,W.groundY,0); mesh.receiveShadow=true;
-  themeRoot.add(mesh); trackDispose(geo,mat,map,nrm);
+  themeRoot.add(mesh); trackDispose(geo,mat,nrm);
 }
 // rounded multi-blob canopy tree (lusher than the cone stack), vertex-coloured
 function gTreeLeafy(leafHexes, trunkHex){
@@ -793,7 +804,14 @@ function spread(count, xMin, xMax, fn){
 function prepModelPrims(gltf, targetSize, opts={}){
   gltf.scene.updateMatrixWorld(true);
   const box=new THREE.Box3().setFromObject(gltf.scene), size=new THREE.Vector3(); box.getSize(size);
-  const s=(targetSize||1)/Math.max(size.x,size.y,size.z), minY=box.min.y;
+  // fit:'height' makes the model stand `targetSize` tall (with a width clamp) so wide-flat caps
+  // (dishes, generators) read as proper 3D instead of squashed pancakes; default fits the largest axis.
+  let s;
+  if(opts.fit==='height'){ s=(targetSize||1)/Math.max(size.y,1e-4);
+    const maxW=opts.maxW!=null?opts.maxW:(targetSize||1)*1.8, w=Math.max(size.x,size.z)*s;
+    if(w>maxW) s*=maxW/w;
+  } else s=(targetSize||1)/Math.max(size.x,size.y,size.z);
+  const minY=box.min.y;
   const prims=[];
   gltf.scene.traverse(m=>{ if(!m.isMesh||!m.geometry) return;
     const g=m.geometry.clone(); g.applyMatrix4(m.matrixWorld); g.scale(s,s,s); g.translate(0,-minY*s,0);
@@ -1521,7 +1539,7 @@ function applyTheme(name){
   const hdr=assets.hdr[T.hdr];
   // HDR is used only for reflections/IBL; sky dome provides the visible background
   scene.environment = hdr || null;
-  scene.environmentIntensity = (name==='space'?0.55: name==='ocean'?0.55: 0.7);
+  scene.environmentIntensity = (name==='space'?0.85: name==='ocean'?0.55: 0.7);
   scene.background = null;
   scene.fog = new THREE.FogExp2(T.fog, T.fogD);
 
@@ -1533,7 +1551,7 @@ function applyTheme(name){
 
   // per-theme cinematic grade (hills = warm golden hour; others near-neutral)
   // punchier + less golden: lower warm tint, push saturation/vibrance up per theme
-  const G = ({ hills:{warm:0.05,sat:1.28,vig:0.36,lift:0.012}, space:{warm:0.0,sat:1.24,vig:0.40,lift:0.0},
+  const G = ({ hills:{warm:0.05,sat:1.28,vig:0.36,lift:0.012}, space:{warm:0.02,sat:1.24,vig:0.38,lift:0.02},
                ocean:{warm:0.03,sat:1.24,vig:0.38,lift:0.01}, ruins:{warm:0.07,sat:1.22,vig:0.34,lift:0.015} })[name] || {warm:0.05,sat:1.22,vig:0.34,lift:0.01};
   gradeU.warm.value=G.warm; gradeU.sat.value=G.sat; gradeU.vignette.value=G.vig; gradeU.lift.value=G.lift;
   // feed the sun direction to foliage rim lighting (dialed back so the gold rim doesn't dominate)
