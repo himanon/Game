@@ -438,6 +438,16 @@ async function preload(){
     loadModel('rocks-sand-a','ocRockSA','ocean','glb'), loadModel('rocks-sand-b','ocRockSB','ocean','glb'),
     loadModel('crate','ocCrate','ocean','glb'), loadModel('crate-bottles','ocCrateB','ocean','glb'),
     loadModel('cannon','ocCannon','ocean','glb'), loadModel('cannon-ball','ocBall','ocean','glb'), loadModel('mast','ocMast','ocean','glb'),
+    // ocean reef life (Poly Pizza CC0/CC-BY): coral colony pillars, reef gardens, fish, hero creatures
+    loadModel('coralFan','ocCoralFan','ocean-life','glb'), loadModel('coralTube','ocCoralTube','ocean-life','glb'),
+    loadModel('coralStag','ocCoralStag','ocean-life','glb'), loadModel('coralFinger','ocCoralFinger','ocean-life','glb'),
+    loadModel('coralPlate','ocCoralPlate','ocean-life','glb'), loadModel('anemone','ocAnemone','ocean-life','glb'),
+    loadModel('kelpGreen','ocKelpA','ocean-life','glb'), loadModel('kelpRibbon','ocKelpB','ocean-life','glb'),
+    loadModel('fishClown','ocFishClown','ocean-life','glb'), loadModel('fishTang','ocFishTang','ocean-life','glb'),
+    loadModel('fishButterfly','ocFishBfly','ocean-life','glb'), loadModel('fishMandarin','ocFishMand','ocean-life','glb'),
+    loadModel('fishSmall','ocFishK','ocean-life','glb'),
+    loadModel('turtle','ocTurtle','ocean-life','glb'), loadModel('shark','ocShark','ocean-life','glb'), loadModel('manta','ocMantaM','ocean-life','glb'),
+    loadModel('urchin','ocUrchin','ocean-life','glb'), loadModel('seahorse','ocSeahorse','ocean-life','glb'), loadModel('crab','ocCrab','ocean-life','glb'),
     // ocean parallax layers (procedural, genbg.cjs) + Kenney Fish Pack sprites (CC0) for swimming schools
     loadBG('ocean_trench.png','bgOTrench'), loadBG('ocean_kelp.png','bgOKelp'), loadBG('ocean_reef.png','bgOReef'),
     loadLocalTex('textures/ocean/fish/fish_blue.png','ocFishA'), loadLocalTex('textures/ocean/fish/fish_orange.png','ocFishB'),
@@ -977,7 +987,7 @@ function makePipeMaterials(theme){
       pipeMats.shaft.normalMap=nrm; pipeMats.shaft.normalScale=ns; pipeMats._nrm=nrm; } }
   else if(theme==='space'){ pipeMats={ shaft:techPillarMat(0x3a3c52,0x6fa8ff), cap:metalMat(0x596484,0.34), core:emissiveMat(0x8fd0ff,0x0e1830,true) };
     pipeMats.shaft.envMapIntensity=0.6; pipeMats.cap.envMapIntensity=0.7; }
-  else if(theme==='ocean') pipeMats={ shaft:stoneMat(0xc66a52,0.7,0xff8f5e,0.3), cap:stdMat({color:C(0xff9a5e),roughness:0.6}), deco:emissiveMat(0xff5f8b,0x3a1020,false) };
+  else if(theme==='ocean') pipeMats={ shaft:stoneMat(0x9a8b86,0.9,0x7d6f78,0.3), cap:stoneMat(0x94837e,0.9,0x7d6f78,0.25), deco:emissiveMat(0xff5f8b,0x3a1020,false) };
   else pipeMats={ shaft:stoneMat(0xc2ad84,0.96), cap:stoneMat(0xb39d72,0.94), deco:stdMat({color:C(0x5c8a3a),roughness:1}) };
 }
 
@@ -993,7 +1003,7 @@ function pipeShaftGeo(theme){
 function pipeCapGeo(theme){
   const r=W.pipeW;
   if(theme==='space') return jitter(new THREE.IcosahedronGeometry(r*1.25,1),0.12);
-  if(theme==='ocean') return new THREE.TorusGeometry(r*1.05, r*0.34, 8, 16);
+  if(theme==='ocean') return jitter(new THREE.CylinderGeometry(r*1.02, r*1.32, 0.62, 12, 1), 0.07);  // low encrusted-rock base the coral head sits on
   if(theme==='ruins') return new THREE.BoxGeometry(r*2.5, r*0.5, r*2.5);
   return new THREE.CylinderGeometry(r*1.28, r*1.18, r*0.8, 24); // hills carved capital
 }
@@ -1062,6 +1072,7 @@ function makePipeSegment(theme, isTop, capPrims){
   const seg=new THREE.Group();
   const shaft=new THREE.Mesh(_pgeo.shaft, pipeMats.shaft); shaft.name='shaft'; shaft.castShadow=true; shaft.receiveShadow=true;
   const capGroup=new THREE.Group();
+  let coralMeshes=[], coralLayout=null;   // ocean: instanced coral climbing the column (positioned in placePipe)
   if(theme==='hills' && _pgeo.towerPrims){
     capGroup.add(buildModelCap(_pgeo.towerPrims, isTop, TOWER_H));   // medieval tower
   } else if(theme==='space'){
@@ -1075,14 +1086,35 @@ function makePipeSegment(theme, isTop, capPrims){
     const cp = capPrims || _pgeo.capV0;                             // varied space module per pillar (dish/antenna/dome/reactor)
     if(cp){ const mc=buildModelCap(cp, isTop, SPACE_CAP_H, 0.4); capGroup.add(mc); capSpinners.push(mc); }  // slow scan rotation
     else capGroup.add(buildReactorCap(isTop));                      // fallback if no cap model loaded
+  } else if(theme==='ocean'){
+    // CORAL-COLONY pillar: a coral head crowns a low encrusted-rock tip, ringed by smaller corals,
+    // all facing the gap. Collision footprint (pipeCap.half) is unchanged — only the visuals.
+    const dir=isTop?-1:1, r=W.pipeW;
+    const base=new THREE.Mesh(_pgeo.cap, pipeMats.cap); base.position.y=dir*0.2; base.castShadow=true; base.receiveShadow=true; capGroup.add(base);
+    if(capPrims) capGroup.add(buildModelCap(capPrims, isTop, OCEAN_CAP_H, 0.5));   // main coral head (cycled species)
+    const sides=_pgeo.coralSide;
+    if(sides && sides.length){
+      const nRim=caps.lowfx?2:3;                                                   // smaller corals ringing the crown base
+      for(let i=0;i<nRim;i++){ const sp=sides[(i+(isTop?1:0))%sides.length];
+        const sub=buildModelCap(sp, isTop, OCEAN_CAP_H*0.55, 0.05);
+        const a=i/nRim*6.28+(isTop?0.7:0.0); sub.position.x=Math.cos(a)*r*0.82; sub.position.z=Math.sin(a)*r*0.82;
+        capGroup.add(sub);
+      }
+    }
+    // coral colonising the whole column: instanced clumps spread along the shaft, placed per-pipe in placePipe
+    if(_pgeo.shaftCoral){
+      const NCOL=caps.lowfx?9:15; coralLayout=[];
+      for(let i=0;i<NCOL;i++) coralLayout.push({ a:srand()*6.28, yf:(i+srand()*0.8)/NCOL, s:rrange(0.8,1.6), ry:srand()*6.28, tilt:rrange(0.2,0.55) });
+      for(const p of _pgeo.shaftCoral){ const im=new THREE.InstancedMesh(p.geo,p.mat,NCOL); im.frustumCulled=false; im.castShadow=true; seg.add(im); coralMeshes.push(im); }
+    }
   } else {
     const cap=new THREE.Mesh(_pgeo.cap, pipeMats.cap); cap.castShadow=true; capGroup.add(cap);
     const deco=buildCapDeco(theme, pipeMats.deco, isTop); capGroup.add(deco);
-    // real 3D model crown per pillar (ocean = sunken treasure, ruins = graveyard stone)
-    if(capPrims) capGroup.add(buildModelCap(capPrims, isTop, theme==='ocean'?OCEAN_CAP_H:RUINS_CAP_H, 0.5));
+    // real 3D model crown per pillar (ruins = graveyard stone)
+    if(capPrims) capGroup.add(buildModelCap(capPrims, isTop, RUINS_CAP_H, 0.5));
   }
   seg.add(shaft, capGroup);
-  return { seg, shaft, capGroup };
+  return { seg, shaft, capGroup, coralMeshes, coralLayout };
 }
 
 let _pgeo={};
@@ -1120,7 +1152,7 @@ function rebuildPipes(theme){
   // the array-dispose branch above frees it. height-fit makes wide models stand proud, not squashed.
   const capMix=({
     space:{ h:SPACE_CAP_H, list:[['capDish',{env:0.6,rough:0.45}],['antenna',{env:0.6,rough:0.5}],['domeStation',{env:0.6,rough:0.3}],['generator',{env:0.6,rough:0.5}]] },
-    ocean:{ h:OCEAN_CAP_H, list:[['ocChest',{env:0.5,rough:0.6}],['ocBarrel',{env:0.5,rough:0.7}],['ocBottle',{env:0.5,rough:0.4}],['ocRocks',{env:0.5,rough:0.85}]] },
+    ocean:{ h:OCEAN_CAP_H, list:[['ocCoralPlate',{env:0.5,rough:0.7}],['ocCoralTube',{env:0.5,rough:0.6}],['ocCoralStag',{env:0.5,rough:0.7}],['ocCoralFan',{env:0.5,rough:0.6}]] },
     ruins:{ h:RUINS_CAP_H, list:[['rcObelisk',{env:0.45,rough:0.9,tint:0x6f7480}],['rcUrn',{env:0.45,rough:0.88,tint:0x6f7480}],['rcPillar',{env:0.45,rough:0.9,tint:0x6f7480}],['rcStone',{env:0.45,rough:0.88,tint:0x6f7480}]] },
   })[theme];
   if(capMix){
@@ -1128,6 +1160,13 @@ function rebuildPipes(theme){
     capMix.list.forEach(([key,opts])=>{ if(assets.glb[key]) variants.push(prepModelPrims(assets.glb[key], capMix.h, Object.assign({fit:'height'},opts))); });
     variants.forEach((v,i)=>{ _pgeo['capV'+i]=v; });
     _pgeo.capN=variants.length;
+  }
+  // ocean coral-colony pillars: smaller coral species encrust the rim + skirt the column top
+  if(theme==='ocean'){
+    const sideKeys=['ocCoralTube','ocCoralFinger','ocAnemone','ocCoralStag'];
+    _pgeo.coralSide=sideKeys.map(k=>assets.glb[k]?prepModelPrims(assets.glb[k], OCEAN_CAP_H*0.55, {fit:'height',env:0.5,rough:0.65}):null).filter(Boolean);
+    // coral encrustation that climbs the whole column (instanced → ~1 draw per pillar regardless of count)
+    _pgeo.shaftCoral=assets.glb.ocCoralTube?prepModelPrims(assets.glb.ocCoralTube, 0.82, {fit:'height',env:0.5,rough:0.7}):null;
   }
   for(let i=0;i<PIPE_POOL;i++) pipes.push(buildPipePair(theme, i));
 }
@@ -1138,7 +1177,23 @@ function placePipe(p){
   const botLen=Math.max(0.2, botEdge-W.groundY), botMid=W.groundY+botLen/2;
   top.shaft.scale.set(1,topLen,1); top.shaft.position.set(0,topMid,0); top.capGroup.position.set(0,topEdge,0);
   bot.shaft.scale.set(1,botLen,1); bot.shaft.position.set(0,botMid,0); bot.capGroup.position.set(0,botEdge,0);
+  // spread the instanced coral up the full length of each column (cap edge -> far end)
+  if(top.coralMeshes&&top.coralMeshes.length) placeShaftCoral(top, topEdge, W.ceilY);
+  if(bot.coralMeshes&&bot.coralMeshes.length) placeShaftCoral(bot, W.groundY, botEdge);
   p.grp.position.set(p.x,0,0);
+}
+const _coralD=new THREE.Object3D();
+function placeShaftCoral(s, yA, yB){
+  const r=W.pipeW, lay=s.coralLayout;
+  for(let i=0;i<lay.length;i++){ const it=lay[i];
+    const y=yA+(yB-yA)*it.yf;
+    _coralD.position.set(Math.cos(it.a)*r*0.94, y, Math.sin(it.a)*r*0.94);
+    // upright clump leaning slightly outward from the column axis, with random spin
+    _coralD.rotation.set(it.tilt*Math.sin(it.a), it.ry, -it.tilt*Math.cos(it.a));
+    _coralD.scale.setScalar(it.s); _coralD.updateMatrix();
+    for(const im of s.coralMeshes) im.setMatrixAt(i,_coralD.matrix);
+  }
+  for(const im of s.coralMeshes) im.instanceMatrix.needsUpdate=true;
 }
 
 /* ============================================================ *

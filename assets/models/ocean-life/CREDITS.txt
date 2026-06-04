@@ -1,0 +1,22 @@
+Ocean reef life models from Poly Pizza (https://poly.pizza).
+Low-poly CC0/CC-BY models; attribution per model below (CC-BY requires it).
+
+coralFan.glb  "underwater_enviro_coral" by God Appeasers (CC0) — https://poly.pizza/m/0CrDBiCnI5e
+coralTube.glb  "coral" by Kelli Ray (CC-BY) — https://poly.pizza/m/7Cs3rTEcpcD
+coralStag.glb  "Coral" by Poly by Google (CC-BY) — https://poly.pizza/m/4KUXdtDdgHR
+coralFinger.glb  "Orange Coral" by Device Lab (CC-BY) — https://poly.pizza/m/3HEc6LvqCJd
+coralPlate.glb  "coral" by Kelli Ray (CC-BY) — https://poly.pizza/m/8UNN578byC0
+anemone.glb  "Anemone" by Poly by Google (CC-BY) — https://poly.pizza/m/1FMGb52XdD-
+kelpGreen.glb  "Kelp" by Poly by Google (CC-BY) — https://poly.pizza/m/4cFllH6Iazk
+kelpRibbon.glb  "Seaweed" by Laney XR Labs (CC-BY) — https://poly.pizza/m/461xlaa6SZW
+fishClown.glb  "Fish" by Quaternius (CC0) — https://poly.pizza/m/BEcU9rjiAq
+fishTang.glb  "Blue Tang" by Quaternius (CC0) — https://poly.pizza/m/TQaMo8GTJl
+fishButterfly.glb  "Butterfly Fish" by Quaternius (CC0) — https://poly.pizza/m/s2MkBeSzGy
+fishMandarin.glb  "Mandarin Fish" by Quaternius (CC0) — https://poly.pizza/m/h6M5zlF5Yx
+fishSmall.glb  "Fish" by Kenney (CC0) — https://poly.pizza/m/HkUAXudvBt
+turtle.glb  "Long-Necked Turtle" by Crispy_Prawn (CC-BY) — https://poly.pizza/m/4kQR07PFTq
+shark.glb  "Shark" by Quaternius (CC0) — https://poly.pizza/m/AyHTK3zUSG
+manta.glb  "Manta ray" by Quaternius (CC0) — https://poly.pizza/m/yzD8b7ZHZm
+urchin.glb  "Sea Urchin" by Poly by Google (CC-BY) — https://poly.pizza/m/f4iwEhEP3-d
+seahorse.glb  "Seahorse" by sirkitree (CC-BY) — https://poly.pizza/m/3H4CqcG6JGP
+crab.glb  "Crab" by Poly by Google (CC-BY) — https://poly.pizza/m/1O5Q4pE8X6e
