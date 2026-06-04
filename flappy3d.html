@@ -222,8 +222,8 @@ const THEMES = {
            sun:0xcfe0ff, sunI:2.3, sunPos:[ 7, 6, 4 ], amb:0x4a4270, ambI:0.85,
            pipe:{ color:0x4a4660, rough:0.5, metal:0.7, emissive:0x6a3bff, emI:1.4 },
            accent:0x8f7bff },
-  ocean: { hdr:'quarry_01_1k.hdr', bg:0x0a4d6e, blur:0.32, fog:0x0c5f86, fogD:0.03,
-           sun:0xbff0ff, sunI:1.7, sunPos:[ -4, 8, 6 ], amb:0x1f7fa6, ambI:0.7,
+  ocean: { hdr:'quarry_01_1k.hdr', bg:0x0a4d6e, blur:0.32, fog:0x063047, fogD:0.014,
+           sun:0xbff0ff, sunI:1.9, sunPos:[ -4, 8, 6 ], amb:0x1f7fa6, ambI:0.72,
            pipe:{ color:0xff7a59, rough:0.7, metal:0.0, emissive:0x3a1008, emI:0.2 },
            accent:0x57e0ff },
   ruins: { hdr:'quarry_01_1k.hdr', bg:0xd9c39a, blur:0.22, fog:0xd8c298, fogD:0.0105,
@@ -432,6 +432,17 @@ async function preload(){
     loadModel('pillar-square','rcPillar','ruins','glb'), loadModel('gravestone-decorative','rcStone','ruins','glb'),
     loadModel('chest','ocChest','ocean','glb'), loadModel('barrel','ocBarrel','ocean','glb'),
     loadModel('bottle-large','ocBottle','ocean','glb'), loadModel('rocks-c','ocRocks','ocean','glb'),
+    // ocean seabed props (Kenney Pirate Kit, CC0): sunken wreck landmark + reef rocks + salvage debris
+    loadModel('ship-wreck','ocWreck','ocean','glb'), loadModel('ship-pirate-large','ocShip','ocean','glb'),
+    loadModel('rocks-a','ocRockA','ocean','glb'), loadModel('rocks-b','ocRockB','ocean','glb'),
+    loadModel('rocks-sand-a','ocRockSA','ocean','glb'), loadModel('rocks-sand-b','ocRockSB','ocean','glb'),
+    loadModel('crate','ocCrate','ocean','glb'), loadModel('crate-bottles','ocCrateB','ocean','glb'),
+    loadModel('cannon','ocCannon','ocean','glb'), loadModel('cannon-ball','ocBall','ocean','glb'), loadModel('mast','ocMast','ocean','glb'),
+    // ocean parallax layers (procedural, genbg.cjs) + Kenney Fish Pack sprites (CC0) for swimming schools
+    loadBG('ocean_trench.png','bgOTrench'), loadBG('ocean_kelp.png','bgOKelp'), loadBG('ocean_reef.png','bgOReef'),
+    loadLocalTex('textures/ocean/fish/fish_blue.png','ocFishA'), loadLocalTex('textures/ocean/fish/fish_orange.png','ocFishB'),
+    loadLocalTex('textures/ocean/fish/fish_pink.png','ocFishC'), loadLocalTex('textures/ocean/fish/fish_green.png','ocFishD'),
+    loadLocalTex('textures/ocean/fish/fish_red.png','ocFishE'), loadLocalTex('textures/ocean/fish/fish_grey_long_a.png','ocFishLong'),
     // Mars ground (ambientCG Ground025, CC0) + real planet maps (planetpixelemporium, free)
     loadLocalTex('textures/space/mars_color.jpg','marsGround',{repeat:true,repeatY:true,aniso:true}),
     loadLocalTex('textures/space/mars_normal.jpg','marsGroundN',{linear:true,repeat:true,repeatY:true,aniso:true}),
@@ -752,6 +763,85 @@ function gSeaweed(){ const parts=[]; let y=0; for(let i=0;i<5;i++){ const s=new 
 function gCoral(hex){ const parts=[]; const base=new THREE.SphereGeometry(0.4,7,6); base.scale(1,0.7,1); parts.push(base);
   const n=3+Math.floor(srand()*3); for(let i=0;i<n;i++){ const b=new THREE.CapsuleGeometry(0.1,rrange(0.4,0.9),3,6); const a=srand()*6.28, t=rrange(0.2,0.7); b.rotateZ(Math.cos(a)*t); b.rotateX(Math.sin(a)*t); b.translate(Math.cos(a)*0.25, rrange(0.3,0.6), Math.sin(a)*0.25); parts.push(b); }
   return jitter(paint(mergeGeometries(parts.map(p=>paint(p,hex)),false),hex),0.03); }
+// tall kelp ribbon (replaces the short seaweed for the forest look) + a single coral fan polyp
+function gKelp(){ const parts=[]; let y=0; for(let i=0;i<7;i++){ const w=Math.max(0.05,0.2-i*0.02); const s=new THREE.BoxGeometry(w,0.62,0.045); s.translate(Math.sin(i*0.9)*0.2, y+0.31, 0); parts.push(s); y+=0.56; } return mergeGeometries(parts,false); }
+
+// ---- UNDERWATER WORLD (mirrors buildMarsTerrain / buildLake) ----
+// gentle reef seabed; ~flat in the play lane so pillars/bird rest level; rises toward the back
+function seabedHeight(wx,wz){
+  let h = Math.sin(wx*0.08)*0.9 + Math.sin(wz*0.06+1.1)*1.1 + Math.sin(wx*0.21+wz*0.13)*0.5;
+  h = (h+2.6)*0.35 + Math.sin(wx*0.6)*0.12;
+  if(h<0) h=0;
+  const back = clampf((-wz-2)/40, 0, 1);
+  const lane = Math.exp(-Math.pow((wx+1.5)/7,2)) * Math.exp(-Math.pow((wz-2)/9,2));
+  return h * (0.4+back*0.6) * (1-0.9*lane) * 1.6;
+}
+// contoured 3D sand seabed: pale lit sand in front fading to a dark teal trench in back, with
+// animated bright cyan CAUSTICS (TSL) that catch bloom. Reuses the Ground025 grain + water normals.
+function buildSeabed(){
+  const sw=caps.lowfx?80:150, sd=caps.lowfx?60:110;
+  const geo=new THREE.PlaneGeometry(400,300,sw,sd);
+  const p=geo.attributes.position, n=p.count;
+  for(let i=0;i<n;i++){ const wx=p.getX(i), wz=-p.getY(i); p.setZ(i, seabedHeight(wx,wz)); }
+  p.needsUpdate=true; geo.computeVertexNormals();
+  const nrm=assets.tex.detailN.clone(); nrm.wrapS=nrm.wrapT=THREE.RepeatWrapping; nrm.repeat.set(60,46); nrm.needsUpdate=true;
+  const map=assets.tex.marsGround;
+  const mat=stdMat({ roughness:0.92, metalness:0.0 });
+  mat.normalMap=nrm; mat.normalScale=new THREE.Vector2(0.5,0.5);
+  mat.colorNode = Fn(()=>{
+    const grain = texture(map, uv().mul(vec2(50,38)));
+    const lum = grain.r.mul(0.4).add(grain.g.mul(0.4)).add(grain.b.mul(0.2));
+    const depth = clamp(positionWorld.z.add(16).mul(0.04), 0, 1);              // 1 near (reef) -> 0 far (trench)
+    const sand = cv(0xcdbf9a), deepCol = cv(0x123c4a);
+    const n2 = mx_noise_float(positionWorld.mul(2.6)).mul(0.5).add(0.5);
+    return mix(deepCol, sand, depth.mul(lum.mul(0.6).add(0.6))).mul(mix(float(0.85), float(1.12), n2));
+  })();
+  mat.emissiveNode = Fn(()=>{
+    const c1 = mx_noise_float(positionWorld.mul(0.6).add(vec3(time.mul(0.10),0,time.mul(0.04))));
+    const c2 = mx_noise_float(positionWorld.mul(0.95).add(vec3(time.mul(-0.07),0,time.mul(0.05))));
+    const caust = pow(clamp(oneMinus(abs(c1.add(c2).mul(0.5))).mul(1.25),0,1), float(3.0));
+    const shallow = clamp(positionWorld.z.add(14).mul(0.05), 0, 1);
+    return cv(0x9fe9ff).mul(caust).mul(shallow).mul(0.9);
+  })();
+  const mesh=new THREE.Mesh(geo,mat); mesh.rotation.x=-Math.PI/2; mesh.position.set(0,W.groundY,0); mesh.receiveShadow=true;
+  themeRoot.add(mesh); trackDispose(geo,mat,nrm);
+}
+// translucent water-surface ceiling seen from below (sun sheen + scrolling ripple normals)
+function buildWaterCeiling(){
+  const geo=new THREE.PlaneGeometry(440,320,1,1);
+  const nrm=assets.tex.detailN.clone(); nrm.wrapS=nrm.wrapT=THREE.RepeatWrapping; nrm.repeat.set(26,20); nrm.needsUpdate=true;
+  const mat=new THREE.MeshStandardNodeMaterial({ color:C(0x2a8fbf), roughness:0.1, metalness:0.0, transparent:true, opacity:0.5, side:THREE.DoubleSide, normalMap:nrm, normalScale:new THREE.Vector2(0.5,0.5) });
+  mat.emissiveNode = cv(0xbfefff).mul(0.2);
+  const mesh=new THREE.Mesh(geo,mat); mesh.rotation.x=Math.PI/2; mesh.position.set(0, 17, -18); mesh.renderOrder=-2;
+  themeRoot.add(mesh); trackDispose(geo,mat,nrm);
+  animators.push((dt,t)=>{ nrm.offset.x=t*0.02; nrm.offset.y=t*0.013; });
+}
+// bioluminescent jellyfish group (translucent pulsing bell + dangling tentacles); bloom makes it glow
+function gJellyfish(hex){
+  const g=new THREE.Group();
+  const bellMat=new THREE.MeshStandardNodeMaterial({ color:C(hex), roughness:0.3, metalness:0.0, transparent:true, opacity:0.55, side:THREE.DoubleSide });
+  bellMat.emissiveNode = cv(hex).mul(sin(time.mul(2.0)).mul(0.3).add(0.95));
+  const bell=new THREE.Mesh(new THREE.SphereGeometry(0.6,14,10,0,6.28,0,Math.PI*0.55), bellMat);
+  bell.scale.set(1,0.8,1); g.add(bell);
+  const tMat=new THREE.MeshBasicNodeMaterial({ color:C(hex), transparent:true, opacity:0.4 });
+  for(let i=0;i<8;i++){ const a=i/8*6.28; const t=new THREE.Mesh(new THREE.CylinderGeometry(0.012,0.04,1.1,4), tMat); t.position.set(Math.cos(a)*0.32, -0.55, Math.sin(a)*0.32); g.add(t); trackDispose(t.geometry); }
+  trackDispose(bell.geometry,bellMat,tMat);
+  g.userData.bell=bell;
+  return g;
+}
+// stylized manta-ray hero silhouette (flat body + two flapping wings + whip tail)
+function gManta(){
+  const g=new THREE.Group();
+  const mat=stdMat({ color:C(0x1f3340), roughness:0.55, metalness:0.05 });
+  const body=new THREE.Mesh(new THREE.SphereGeometry(0.6,12,8), mat); body.scale.set(0.8,0.22,1.5); g.add(body);
+  const tail=new THREE.Mesh(new THREE.CylinderGeometry(0.05,0.006,2.4,5), mat); tail.rotation.x=Math.PI/2; tail.position.set(0,0,-1.9); g.add(tail);
+  const wingGeo=new THREE.ConeGeometry(1.0,2.6,3);
+  const wL=new THREE.Mesh(wingGeo,mat); wL.scale.set(1.0,0.12,1.35); wL.rotation.z=-Math.PI/2; wL.position.set(-1.25,0,0);
+  const wR=new THREE.Mesh(wingGeo,mat); wR.scale.set(1.0,0.12,1.35); wR.rotation.z= Math.PI/2; wR.position.set( 1.25,0,0);
+  g.add(wL,wR); trackDispose(body.geometry,tail.geometry,wingGeo,mat);
+  g.userData.wings=[wL,wR];
+  return g;
+}
 
 /* ============================================================ *
  *  5b. SCENERY FRAMEWORK (instanced + scrolling bands)
@@ -775,6 +865,7 @@ class Band{
     this.speedMul=opts.speedMul!=null?opts.speedMul:1;
     this.minX=opts.minX!=null?opts.minX:-30; this.maxX=opts.maxX!=null?opts.maxX:30;
     this.sway=opts.sway||0; this.bob=opts.bob||0; this.spin=opts.spin||0; this.swim=opts.swim||0;
+    this.snapY=opts.snapY||null;   // optional terrain sampler (seabed contour) like ModelBand
     this._d=new THREE.Object3D();
     items.forEach((it,i)=>{ if(it.color!=null) this.mesh.setColorAt(i, C(it.color)); });
     this.write(0); trackDispose(geo,mat); themeRoot.add(this.mesh);
@@ -785,7 +876,8 @@ class Band{
       const sway=this.sway?Math.sin(t*1.5+it.phase)*this.sway*windGust:0;
       const bob=this.bob?Math.sin(t*0.9+it.phase)*this.bob:0;
       const swim=this.swim?Math.sin(t*0.7+it.phase)*this.swim:0;
-      d.position.set(it.x, it.y+bob, it.z+swim);
+      const sy=this.snapY?this.snapY(it.x, it.z):0;
+      d.position.set(it.x, it.y+sy+bob, it.z+swim);
       d.rotation.set(it.rx||0, (it.ry||0)+(this.spin?t*this.spin*(it.sp||1):0), (it.rz||0)+sway);
       d.scale.set(it.s*(it.sx||1), it.s, it.s); d.updateMatrix();
       this.mesh.setMatrixAt(i,d.matrix);
@@ -1501,26 +1593,97 @@ function scenerySpace(L){
     { speedMul:1.25, minX:-40, maxX:40, spin:0.2, env:0.5 });
 }
 function sceneryOcean(L){
-  // god-ray light shafts (additive sprites from top)
-  for(let i=0;i<6;i++){ const sp=new THREE.Sprite(new THREE.SpriteNodeMaterial({ map:assets.tex.smoke, color:C(0xcfeaff), transparent:true, opacity:0.16, depthWrite:false, blending:THREE.AdditiveBlending }));
-    sp.position.set(rrange(-14,14), rrange(4,12), rrange(-30,-10)); sp.scale.set(rrange(3,6), rrange(20,30), 1); themeRoot.add(sp); trackDispose(sp.material); }
-  // coral field (foreground)
-  bands.push(new Band(gCoral(L.coral[0]), stdMat({vertexColors:true, roughness:0.7}),
-    spread(10,-22,22,(it)=>{ it.y=W.groundY+0.1; it.z=rrange(-6,4); it.s=rrange(1.2,2.6); it.ry=rrange(0,6.28); }),
-    { speedMul:0.9, minX:-26, maxX:26, sway:0.05, shadow:true }));
-  // seaweed
-  bands.push(new Band(gSeaweed(), stdMat({color:C(L.seaweed[0]), roughness:0.8}),
-    spread(16,-22,22,(it)=>{ it.y=W.groundY+0.1; it.z=rrange(-8,3); it.s=rrange(1.1,2.4); it.color=L.seaweed[Math.floor(srand()*2)]; }),
-    { speedMul:0.9, minX:-26, maxX:26, sway:0.12 }));
-  // fish schools (swim + scroll)
-  bands.push(new Band(gFish(), stdMat({color:C(L.fish[0]), roughness:0.5, metalness:0.1}),
-    spread(18,-30,30,(it)=>{ it.y=rrange(-6,9); it.z=rrange(-16,2); it.s=rrange(0.4,1.0); it.color=L.fish[Math.floor(srand()*L.fish.length)]; }),
+  const lowfx=caps.lowfx;
+  const oceanAdd=(x,z)=>seabedHeight(x,z);
+
+  // ---- parallax depth: deep trench -> kelp-forest silhouette -> reef ridge (mirrors hills/space) ----
+  bgLayer(assets.tex.bgOTrench, -118, 64, W.groundY-18, 0.0013, 0xffffff, true);
+  bgLayer(assets.tex.bgOKelp,    -90, 36, W.groundY-3,  0.0030, 0xbfeede);
+  bgLayer(assets.tex.bgOReef,    -62, 22, W.groundY-2,  0.0060, 0xcfeede);
+
+  // ---- contoured sand seabed (+ caustics) and translucent water-surface ceiling overhead ----
+  buildSeabed();
+  buildWaterCeiling();
+
+  // ---- god-ray shafts descending from the surface (additive, gently swaying) ----
+  for(let i=0;i<(lowfx?5:9);i++){ const bx=rrange(-20,20);
+    const sp=new THREE.Sprite(new THREE.SpriteNodeMaterial({ map:assets.tex.smoke, color:C(0xcfeaff), transparent:true, opacity:0.14, depthWrite:false, blending:THREE.AdditiveBlending }));
+    sp.position.set(bx, rrange(2,12), rrange(-34,-8)); sp.scale.set(rrange(3,6), rrange(22,34), 1); themeRoot.add(sp); trackDispose(sp.material);
+    const ph=rrange(0,6.28); animators.push((dt,t)=>{ sp.position.x=bx+Math.sin(t*0.25+ph)*2.0; sp.material.opacity=0.08+Math.abs(Math.sin(t*0.5+ph))*0.12; }); }
+
+  // ---- HERO landmark: a sunken shipwreck (far, half-buried, listing) + a galleon mid-ground ----
+  modelBand('ocWreck', 1, [{ x:24, y:0.2, z:-46, s:14, ry:-0.6, rz:0.12, phase:0 }], { speedMul:0.12, minX:-60, maxX:60, env:0.5, receive:true, snapY:oceanAdd });
+  modelBand('ocShip',  1, [{ x:-30, y:0.2, z:-40, s:9, ry:0.5, rz:-0.08, phase:0 }], { speedMul:0.16, minX:-54, maxX:54, env:0.5, snapY:oceanAdd });
+
+  // ---- reef rocks & boulders strewn on the seabed ----
+  ['ocRockA','ocRockB','ocRockSA','ocRockSB','ocRocks'].forEach((k)=>{
+    modelBand(k, 1.6, spread(lowfx?3:5,-34,34,(it)=>{ it.y=0.0; it.z=rrange(-14,3); it.s=rrange(1.0,2.6); it.ry=rrange(0,6.28); it.rx=rrange(-0.1,0.1); }),
+      { speedMul:1.0, minX:-36, maxX:36, env:0.45, snapY:oceanAdd }); });
+
+  // ---- salvage debris: barrels (always) + crates/cannons/masts (HQ) ----
+  modelBand('ocBarrel', 1, spread(lowfx?2:3,-34,34,(it)=>{ it.y=0.0; it.z=rrange(-12,2); it.s=rrange(1.6,2.2); it.ry=rrange(0,6.28); it.rz=rrange(-0.2,0.2); }),
+    { speedMul:1.0, minX:-36, maxX:36, env:0.5, snapY:oceanAdd });
+  if(!lowfx){
+    modelBand('ocCrate',  1, spread(3,-34,34,(it)=>{ it.y=0.0; it.z=rrange(-12,3); it.s=rrange(1.4,2.0); it.ry=rrange(0,6.28); }), { speedMul:1.0, minX:-36, maxX:36, env:0.5, snapY:oceanAdd });
+    modelBand('ocCannon', 1, spread(2,-34,34,(it)=>{ it.y=0.0; it.z=rrange(-10,2); it.s=rrange(1.6,2.2); it.ry=rrange(0,6.28); it.rz=0.1; }), { speedMul:1.0, minX:-36, maxX:36, env:0.5, snapY:oceanAdd });
+    modelBand('ocCrateB', 1, spread(2,-34,34,(it)=>{ it.y=0.0; it.z=rrange(-10,3); it.s=rrange(1.3,1.8); it.ry=rrange(0,6.28); }), { speedMul:1.0, minX:-36, maxX:36, env:0.5, snapY:oceanAdd });
+    modelBand('ocMast',   1, spread(2,-36,36,(it)=>{ it.y=0.0; it.z=rrange(-16,-4); it.s=rrange(3,5); it.ry=rrange(0,6.28); it.rz=rrange(0.3,0.8); }), { speedMul:0.7, minX:-40, maxX:40, env:0.5, snapY:oceanAdd });
+  }
+
+  // ---- coral gardens (procedural, every palette colour) at several depths ----
+  L.coral.forEach((hex)=>{
+    bands.push(new Band(gCoral(hex), stdMat({ vertexColors:true, roughness:0.7 }),
+      spread(lowfx?5:8,-26,26,(it)=>{ it.y=0.0; it.z=rrange(-12,4); it.s=rrange(1.0,2.6); it.ry=rrange(0,6.28); }),
+      { speedMul:1.0, minX:-28, maxX:28, sway:0.04, shadow:!lowfx, snapY:oceanAdd })); });
+
+  // ---- kelp forest: tall swaying strands, dense mid-ground ----
+  bands.push(new Band(gKelp(), stdMat({ color:C(L.seaweed[0]), roughness:0.8 }),
+    spread(lowfx?12:22,-26,26,(it)=>{ it.y=0.0; it.z=rrange(-14,2); it.s=rrange(1.4,3.2); it.color=L.seaweed[Math.floor(srand()*2)]; }),
+    { speedMul:1.0, minX:-28, maxX:28, sway:0.16, snapY:oceanAdd }));
+
+  // ---- FISH: 3D procedural school + Kenney sprite species (textured quads, side-on, facing the swim dir) ----
+  bands.push(new Band(gFish(), stdMat({ color:C(L.fish[0]), roughness:0.5, metalness:0.1 }),
+    spread(lowfx?10:18,-30,30,(it)=>{ it.y=rrange(-6,9); it.z=rrange(-16,2); it.s=rrange(0.4,1.0); it.color=L.fish[Math.floor(srand()*L.fish.length)]; }),
     { speedMul:0.7, minX:-34, maxX:34, swim:0.5, bob:0.2 }));
-  // bubbles (rise)
-  const bub=spread(26,-18,18,(it)=>{ it.y=rrange(-10,8); it.z=rrange(-8,4); it.s=rrange(0.08,0.22); });
-  const bubBand=new Band(new THREE.SphereGeometry(1,6,5), stdMat({color:C(0xbfefff), roughness:0.1, metalness:0, transparent:true, opacity:0.5}), bub, { speedMul:0.5, minX:-22, maxX:22 });
-  bands.push(bubBand);
-  animators.push((dt)=>{ for(const it of bub){ it.y+=dt*(0.6+it.s*3); if(it.y>10) it.y=-10; } });
+  const fishKeys=['ocFishA','ocFishB','ocFishC','ocFishD','ocFishE'];
+  (lowfx?fishKeys.slice(0,2):fishKeys).forEach((key)=>{ const tex=assets.tex[key]; if(!tex) return;
+    const aspect=tex.image?tex.image.width/tex.image.height:1.3;
+    const m=new THREE.MeshBasicNodeMaterial({ map:tex, transparent:true, alphaTest:0.5, side:THREE.DoubleSide, depthWrite:true });
+    bands.push(new Band(new THREE.PlaneGeometry(aspect,1), m,
+      spread(lowfx?5:9,-32,32,(it)=>{ it.y=rrange(-7,9); it.z=rrange(-12,1); it.s=rrange(0.7,1.6); }),
+      { speedMul:rrange(0.6,0.9), minX:-36, maxX:36, swim:0.4, bob:0.25 })); });
+
+  // ---- HERO manta ray gliding across the deep (flapping wings; HQ only) ----
+  if(!lowfx){ const manta=gManta(); manta.position.set(20,4,-30); manta.scale.setScalar(2.2); themeRoot.add(manta);
+    const w=manta.userData.wings;
+    animators.push((dt,t)=>{ manta.position.x-=dt*1.6; if(manta.position.x<-34) manta.position.x=34;
+      manta.position.y=4+Math.sin(t*0.4)*1.2; manta.rotation.y=Math.sin(t*0.4)*0.12;
+      const fl=Math.sin(t*1.4)*0.5; w[0].rotation.z=-Math.PI/2-fl; w[1].rotation.z=Math.PI/2+fl; }); }
+
+  // ---- bioluminescent jellyfish drifting in the mid/back trench (bloom-lit) ----
+  const jcol=[0x6fd0ff,0xb86bff,0xff79c6,0x57ffd1];
+  for(let i=0;i<(lowfx?2:5);i++){ const j=gJellyfish(jcol[i%jcol.length]); const bx=rrange(-24,24),by=rrange(-4,8),bz=rrange(-26,-8);
+    j.position.set(bx,by,bz); j.scale.setScalar(rrange(1.0,1.8)); themeRoot.add(j);
+    const ph=rrange(0,6.28), bell=j.userData.bell;
+    animators.push((dt,t)=>{ j.position.y=by+Math.sin(t*0.5+ph)*1.6; j.position.x=bx+Math.sin(t*0.18+ph)*3.0;
+      const pu=Math.sin(t*2.0+ph); bell.scale.set(1+pu*0.12, 0.8-pu*0.1, 1+pu*0.12); }); }
+
+  // ---- ambient: rising bubbles + drifting marine snow + bioluminescent motes ----
+  const bub=spread(lowfx?16:28,-18,18,(it)=>{ it.y=rrange(-10,8); it.z=rrange(-8,4); it.s=rrange(0.08,0.22); });
+  bands.push(new Band(new THREE.SphereGeometry(1,6,5), stdMat({ color:C(0xbfefff), roughness:0.1, metalness:0, transparent:true, opacity:0.5 }), bub, { speedMul:0.5, minX:-22, maxX:22 }));
+  animators.push((dt)=>{ for(const it of bub){ it.y+=dt*(0.6+it.s*3); if(it.y>11) it.y=-10; } });
+  const snow=spread(lowfx?18:34,-26,26,(it)=>{ it.y=rrange(-9,12); it.z=rrange(-12,5); it.s=rrange(0.04,0.12); });
+  bands.push(new Band(new THREE.PlaneGeometry(1,1), new THREE.MeshBasicNodeMaterial({ map:assets.tex.spark, color:C(0xdff4ff), transparent:true, opacity:0.3, depthWrite:false, blending:THREE.AdditiveBlending, side:THREE.DoubleSide }), snow, { speedMul:0.5, minX:-28, maxX:28, bob:0.3 }));
+  animators.push((dt)=>{ for(const it of snow){ it.y+=dt*(0.2+it.s); if(it.y>13) it.y=-9; } });
+  if(!lowfx){ for(let i=0;i<14;i++){ const col=[0x6fd0ff,0x9affd1,0xb86bff][i%3];
+    const m=new THREE.SpriteNodeMaterial({ map:assets.tex.disc, color:C(col), transparent:true, opacity:0.5, depthWrite:false, blending:THREE.AdditiveBlending });
+    const sp=new THREE.Sprite(m); const bx=rrange(-26,26),by=rrange(-8,8),bz=rrange(-22,-6); sp.position.set(bx,by,bz); sp.scale.setScalar(rrange(0.3,0.7)); themeRoot.add(sp); trackDispose(m);
+    const ph=rrange(0,6.28); animators.push((dt,t)=>{ sp.position.y=by+Math.sin(t*0.4+ph)*1.2; sp.material.opacity=0.15+Math.abs(Math.sin(t*1.6+ph))*0.5; }); } }
+
+  // ---- foreground DOF framing: dark kelp fronds close to camera (cinematic bokeh) ----
+  bands.push(new Band(gKelp(), stdMat({ color:C(0x0a3a30), roughness:0.9 }),
+    spread(lowfx?4:7,-26,26,(it)=>{ it.y=0.0; it.z=rrange(7,12); it.s=rrange(3.5,5.5); }),
+    { speedMul:1.25, minX:-30, maxX:30, sway:0.18, snapY:oceanAdd }));
 }
 function gBrokenColumn(){
   // fluted column snapped at an angle on top
@@ -1588,8 +1751,8 @@ function applyTheme(name){
   if(ground){
     const gm=ground.userData.mat; gm.color.setHex(L.ground);
     if(gm.map){ gm.map=null; gm.needsUpdate=true; }
-    // hills draws its own terrain; space flies over an asteroid belt (no floor) -> hide the flat plane
-    ground.visible = (name!=='hills' && name!=='space');
+    // hills/space/ocean draw their own contoured floor (terrain / asteroids / seabed) -> hide the flat plane
+    ground.visible = (name!=='hills' && name!=='space' && name!=='ocean');
   }
 
   // tint the bird's accent backlight to the theme

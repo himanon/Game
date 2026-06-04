@@ -1,0 +1,3 @@
+Fish Pack by Kenney (www.kenney.nl) - CC0 1.0 Universal (Public Domain).
+2D fish sprites (side profile) used as textured billboards for the ocean swimming schools.
+Curated: fish_blue, fish_orange, fish_pink, fish_green, fish_red, fish_grey_long_a. See KENNEY-LICENSE.txt.

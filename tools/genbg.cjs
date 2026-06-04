@@ -229,6 +229,42 @@ fs.mkdirSync(OUT, { recursive: true });
       finish('space_planets',c,ctx,3,true);
     })();
 
+    // ===== OCEAN: TRENCH (deep-water vertical gradient + light columns + marine snow, tileable) =====
+    (function(){ const W=1280,H=448,c=mk(W,H),ctx=c.getContext('2d'); const rand=rng(201);
+      ctx.fillStyle=vgrad(ctx,0,0,H,[[0,'#0a4a66'],[0.5,'#063047'],[1,'#02101c']]); ctx.fillRect(0,0,W,H);
+      for(let i=0;i<7;i++){ const x=rand()*W, w=40+rand()*90; const g=ctx.createLinearGradient(x,0,x+w*0.4,H);
+        g.addColorStop(0,'rgba(150,225,255,0.10)'); g.addColorStop(0.6,'rgba(120,200,235,0.03)'); g.addColorStop(1,'rgba(120,200,235,0)');
+        ctx.fillStyle=g; ctx.beginPath(); ctx.moveTo(x,0); ctx.lineTo(x+w,0); ctx.lineTo(x+w*1.5,H); ctx.lineTo(x+w*0.5,H); ctx.closePath(); ctx.fill(); }
+      ctx.fillStyle='#bfeeff'; for(let i=0;i<260;i++){ const x=rand()*W,y=rand()*H,s=rand()*1.5+0.3; ctx.globalAlpha=0.05+rand()*0.25; ctx.fillRect(x,y,s,s);} ctx.globalAlpha=1;
+      finish('ocean_trench',c,ctx,3,true);
+    })();
+
+    // ===== OCEAN: KELP FOREST (tall swaying strand silhouettes, tileable) =====
+    (function(){ const W=2048,H=512,c=mk(W,H),ctx=c.getContext('2d'); const rand=rng(212);
+      const baseY=H*1.02;
+      ctx.fillStyle=vgrad(ctx,0,H*0.5,H,[[0,'rgba(6,40,52,0)'],[1,'rgba(4,30,42,0.9)']]); ctx.fillRect(0,H*0.5,W,H*0.5);
+      const N=70;
+      for(let i=0;i<N;i++){ const x=(i/N)*W + (rand()-0.5)*20; const th=160+rand()*260; const w=8+rand()*14;
+        const sway=(rand()-0.5)*120, topY=baseY-th;
+        const g=vgrad(ctx,0,topY,baseY,[[0,'#16614f'],[1,'#073026']]); ctx.strokeStyle=g; ctx.lineWidth=w; ctx.lineCap='round';
+        ctx.beginPath(); ctx.moveTo(x,baseY); ctx.bezierCurveTo(x+sway*0.3, baseY-th*0.4, x+sway*0.7, baseY-th*0.75, x+sway, topY); ctx.stroke();
+        ctx.globalAlpha=0.5; ctx.fillStyle='#1c6f54'; for(let k=0;k<3;k++){ const ty=topY+th*(0.3+k*0.22); ctx.beginPath(); ctx.ellipse(x+sway*(0.4+k*0.2), ty, w*1.6, w*0.5, 0.5, 0,6.28); ctx.fill(); } ctx.globalAlpha=1;
+      }
+      finish('ocean_kelp',c,ctx,4,true);
+    })();
+
+    // ===== OCEAN: REEF (near seabed ridge with coral/sea-fan speckle, tileable) =====
+    (function(){ const W=2048,H=420,c=mk(W,H),ctx=c.getContext('2d'); const rand=rng(223);
+      const harm=harmonics(rand,5), base=H*1.04, amp=H*0.5;
+      ctx.save(); ridgePath(ctx,W,H,base,amp,harm);
+      ctx.fillStyle=vgrad(ctx,0,base-amp,base,[[0,'#0e5566'],[1,'#04222e']]); ctx.fill(); ctx.clip();
+      for(let k=0;k<340;k++){ const x=rand()*W; const u=x/W*Math.PI*2; const y=base-heightAt(u,harm)*amp + rand()*36;
+        const col=['#1f8f86','#2f9f6a','#c85a7a','#d98a3a','#9a6ad0'][(rand()*5)|0]; ctx.globalAlpha=0.16; ctx.fillStyle=col;
+        ctx.beginPath(); ctx.arc(x,y,2+rand()*5,0,6.28); ctx.fill(); } ctx.globalAlpha=1;
+      ctx.restore();
+      finish('ocean_reef',c,ctx,5,true);
+    })();
+
     return out;
   });
 

@@ -4,7 +4,7 @@
    Run: node tools/fetchpackD.cjs */
 const https=require('https'), fs=require('fs'), { execSync }=require('child_process');
 const PACKS={
-  ocean: { slug:'pirate-kit',    dst:'assets/models/ocean', pick:['chest','barrel','bottle-large','rocks-c'] },
+  ocean: { slug:'pirate-kit',    dst:'assets/models/ocean', pick:['chest','barrel','bottle-large','rocks-c','ship-wreck','ship-pirate-large','rocks-a','rocks-b','rocks-sand-a','rocks-sand-b','crate','crate-bottles','cannon','cannon-ball','mast'] },
   ruins: { slug:'graveyard-kit', dst:'assets/models/ruins', pick:['pillar-obelisk','urn-round','pillar-square','gravestone-decorative'] },
 };
 function getHTML(url,redirs=0){ return new Promise((res,rej)=>{ https.get(url,{headers:{'User-Agent':'Mozilla/5.0'}},r=>{
