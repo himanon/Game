@@ -222,7 +222,7 @@ const THEMES = {
            sun:0xcfe0ff, sunI:2.3, sunPos:[ 7, 6, 4 ], amb:0x4a4270, ambI:0.85,
            pipe:{ color:0x4a4660, rough:0.5, metal:0.7, emissive:0x6a3bff, emI:1.4 },
            accent:0x8f7bff },
-  ocean: { hdr:'quarry_01_1k.hdr', bg:0x0a4d6e, blur:0.32, fog:0x063047, fogD:0.014,
+  ocean: { hdr:'quarry_01_1k.hdr', bg:0x0a4d6e, blur:0.32, fog:0x073650, fogD:0.0065,
            sun:0xbff0ff, sunI:1.9, sunPos:[ -4, 8, 6 ], amb:0x1f7fa6, ambI:0.72,
            pipe:{ color:0xff7a59, rough:0.7, metal:0.0, emissive:0x3a1008, emI:0.2 },
            accent:0x57e0ff },
@@ -782,9 +782,9 @@ function seabedHeight(wx,wz){
   let h = Math.sin(wx*0.08)*0.9 + Math.sin(wz*0.06+1.1)*1.1 + Math.sin(wx*0.21+wz*0.13)*0.5;
   h = (h+2.6)*0.35 + Math.sin(wx*0.6)*0.12;
   if(h<0) h=0;
-  const back = clampf((-wz-2)/40, 0, 1);
+  const back = clampf((-wz-2)/38, 0, 1);
   const lane = Math.exp(-Math.pow((wx+1.5)/7,2)) * Math.exp(-Math.pow((wz-2)/9,2));
-  return h * (0.4+back*0.6) * (1-0.9*lane) * 1.6;
+  return h * (0.45+back*0.85) * (1-0.9*lane) * 2.1;   // stronger reef relief (rising toward the trench) so caustics/shadows read
 }
 // contoured 3D sand seabed: pale lit sand in front fading to a dark teal trench in back, with
 // animated bright cyan CAUSTICS (TSL) that catch bloom. Reuses the Ground025 grain + water normals.
@@ -797,7 +797,7 @@ function buildSeabed(){
   const nrm=assets.tex.detailN.clone(); nrm.wrapS=nrm.wrapT=THREE.RepeatWrapping; nrm.repeat.set(60,46); nrm.needsUpdate=true;
   const map=assets.tex.marsGround;
   const mat=stdMat({ roughness:0.92, metalness:0.0 });
-  mat.normalMap=nrm; mat.normalScale=new THREE.Vector2(0.5,0.5);
+  mat.normalMap=nrm; mat.normalScale=new THREE.Vector2(0.8,0.8);
   mat.colorNode = Fn(()=>{
     const grain = texture(map, uv().mul(vec2(50,38)));
     const lum = grain.r.mul(0.4).add(grain.g.mul(0.4)).add(grain.b.mul(0.2));
@@ -967,6 +967,17 @@ class ModelBand{
 function modelBand(key, targetSize, items, opts={}){
   const g=assets.glb[key]; if(!g) return;
   bands.push(new ModelBand(prepModelPrims(g, targetSize, opts), items, opts));
+}
+// spawn ONE textured GLB as a centred, free-moving object (for swimming hero creatures); returns the
+// wrapper group (added to themeRoot) so the caller can animate position/rotation each frame.
+function spawnCreature(key, size){
+  const g=assets.glb[key]; if(!g) return null;
+  const root=g.scene.clone(true);
+  const box=new THREE.Box3().setFromObject(root), sz=new THREE.Vector3(), ctr=new THREE.Vector3();
+  box.getSize(sz); box.getCenter(ctr);
+  const s=size/Math.max(sz.x,sz.y,sz.z||1);
+  root.scale.setScalar(s); root.position.set(-ctr.x*s,-ctr.y*s,-ctr.z*s);
+  const wrap=new THREE.Group(); wrap.add(root); themeRoot.add(wrap); return wrap;
 }
 
 /* ============================================================ *
@@ -1647,18 +1658,26 @@ function scenerySpace(L){
   if(!lowfx) modelBand('astRock', 1, spread(3,-34,34,(it)=>{ it.y=(srand()<0.5?rrange(-16,-11):rrange(11,16)); it.z=rrange(9,13); it.s=rrange(3,5); it.rx=rrange(0,6.28); it.ry=rrange(0,6.28); }),
     { speedMul:1.25, minX:-40, maxX:40, spin:0.2, env:0.5 });
 }
+// per-pack model forward-axis offsets (each asset source orients its meshes differently); tuned so
+// creatures show a broadside profile as they glide left across the scene.
+const OC_FISH_HDG=Math.PI*0.5, OC_MANTA_HDG=0, OC_TURTLE_HDG=0, OC_SHARK_HDG=Math.PI*0.5;
 function sceneryOcean(L){
   const lowfx=caps.lowfx;
   const oceanAdd=(x,z)=>seabedHeight(x,z);
-
   // ---- parallax depth: deep trench -> kelp-forest silhouette -> reef ridge (mirrors hills/space) ----
-  bgLayer(assets.tex.bgOTrench, -118, 64, W.groundY-18, 0.0013, 0xffffff, true);
-  bgLayer(assets.tex.bgOKelp,    -90, 36, W.groundY-3,  0.0030, 0xbfeede);
-  bgLayer(assets.tex.bgOReef,    -62, 22, W.groundY-2,  0.0060, 0xcfeede);
+  bgLayer(assets.tex.bgOTrench, -120, 70, W.groundY-16, 0.0013, 0xffffff, true);
+  bgLayer(assets.tex.bgOKelp,    -92, 42, W.groundY-4,  0.0030, 0xbfeede);
+  bgLayer(assets.tex.bgOReef,    -64, 28, W.groundY-2,  0.0060, 0xcfeede);
 
   // ---- contoured sand seabed (+ caustics) and translucent water-surface ceiling overhead ----
   buildSeabed();
   buildWaterCeiling();
+
+  // ---- deep biolume haze: soft glowing clouds far back so the trench reads as deep, not empty (HQ) ----
+  if(!lowfx){ const hcol=[0x2a6fae,0x2f8f86,0x6a3f9e];
+    for(let i=0;i<5;i++){ const sp=new THREE.Sprite(new THREE.SpriteNodeMaterial({ map:assets.tex.smoke, color:C(hcol[i%3]), transparent:true, opacity:0.2, depthWrite:false, blending:THREE.AdditiveBlending }));
+      sp.position.set(rrange(-34,34), rrange(-4,16), rrange(-72,-46)); sp.scale.setScalar(rrange(20,40)); themeRoot.add(sp); trackDispose(sp.material);
+      const ph=rrange(0,6.28); animators.push((dt,t)=>{ sp.material.opacity=0.1+Math.abs(Math.sin(t*0.2+ph))*0.16; }); } }
 
   // ---- god-ray shafts descending from the surface (additive, gently swaying) ----
   for(let i=0;i<(lowfx?5:9);i++){ const bx=rrange(-20,20);
@@ -1685,35 +1704,52 @@ function sceneryOcean(L){
     modelBand('ocMast',   1, spread(2,-36,36,(it)=>{ it.y=0.0; it.z=rrange(-16,-4); it.s=rrange(3,5); it.ry=rrange(0,6.28); it.rz=rrange(0.3,0.8); }), { speedMul:0.7, minX:-40, maxX:40, env:0.5, snapY:oceanAdd });
   }
 
-  // ---- coral gardens (procedural, every palette colour) at several depths ----
-  L.coral.forEach((hex)=>{
-    bands.push(new Band(gCoral(hex), stdMat({ vertexColors:true, roughness:0.7 }),
-      spread(lowfx?5:8,-26,26,(it)=>{ it.y=0.0; it.z=rrange(-12,4); it.s=rrange(1.0,2.6); it.ry=rrange(0,6.28); }),
-      { speedMul:1.0, minX:-28, maxX:28, sway:0.04, shadow:!lowfx, snapY:oceanAdd })); });
+  // ---- coral gardens: real reef coral (mixed species) spread across depth, denser toward the front ----
+  const coralKeys=['ocCoralFan','ocCoralStag','ocCoralFinger','ocCoralTube','ocCoralPlate'];
+  (lowfx?coralKeys.slice(0,3):coralKeys).forEach((k)=>{
+    modelBand(k, 2.1, spread(lowfx?4:7,-32,32,(it)=>{ it.y=0.0; it.z=rrange(-32,7); it.s=rrange(0.9,2.2); it.ry=rrange(0,6.28); it.rx=rrange(-0.08,0.08); }),
+      { speedMul:1.0, minX:-34, maxX:34, sway:0.05, shadow:!lowfx, snapY:oceanAdd }); });
 
-  // ---- kelp forest: tall swaying strands, dense mid-ground ----
-  bands.push(new Band(gKelp(), stdMat({ color:C(L.seaweed[0]), roughness:0.8 }),
-    spread(lowfx?12:22,-26,26,(it)=>{ it.y=0.0; it.z=rrange(-14,2); it.s=rrange(1.4,3.2); it.color=L.seaweed[Math.floor(srand()*2)]; }),
-    { speedMul:1.0, minX:-28, maxX:28, sway:0.16, snapY:oceanAdd }));
+  // ---- seabed detail: anemones, urchins, seahorses, crabs nestled in the reef (HQ) ----
+  if(!lowfx){
+    modelBand('ocAnemone',  1.4, spread(5,-30,30,(it)=>{ it.y=0.0; it.z=rrange(-24,6); it.s=rrange(0.8,1.6); it.ry=rrange(0,6.28); }), { speedMul:1.0, minX:-32, maxX:32, sway:0.08, snapY:oceanAdd });
+    modelBand('ocUrchin',   1.0, spread(4,-30,30,(it)=>{ it.y=0.0; it.z=rrange(-22,6); it.s=rrange(0.7,1.3); it.ry=rrange(0,6.28); }), { speedMul:1.0, minX:-32, maxX:32, snapY:oceanAdd });
+    modelBand('ocSeahorse', 1.5, spread(3,-28,28,(it)=>{ it.y=rrange(0.5,2.2); it.z=rrange(-20,2); it.s=rrange(0.8,1.2); it.ry=rrange(0,6.28); }), { speedMul:1.0, minX:-30, maxX:30, bob:0.25, snapY:oceanAdd });
+    modelBand('ocCrab',     1.1, spread(3,-30,30,(it)=>{ it.y=0.0; it.z=rrange(-18,6); it.s=rrange(0.7,1.1); it.ry=rrange(0,6.28); }), { speedMul:1.0, minX:-32, maxX:32, snapY:oceanAdd });
+  }
 
-  // ---- FISH: 3D procedural school + Kenney sprite species (textured quads, side-on, facing the swim dir) ----
-  bands.push(new Band(gFish(), stdMat({ color:C(L.fish[0]), roughness:0.5, metalness:0.1 }),
-    spread(lowfx?10:18,-30,30,(it)=>{ it.y=rrange(-6,9); it.z=rrange(-16,2); it.s=rrange(0.4,1.0); it.color=L.fish[Math.floor(srand()*L.fish.length)]; }),
-    { speedMul:0.7, minX:-34, maxX:34, swim:0.5, bob:0.2 }));
-  const fishKeys=['ocFishA','ocFishB','ocFishC','ocFishD','ocFishE'];
-  (lowfx?fishKeys.slice(0,2):fishKeys).forEach((key)=>{ const tex=assets.tex[key]; if(!tex) return;
+  // ---- kelp forest: real kelp GLBs at staggered depth, strong sway ----
+  ['ocKelpA','ocKelpB'].forEach((k)=>{
+    modelBand(k, 4.2, spread(lowfx?8:16,-30,30,(it)=>{ it.y=0.0; it.z=rrange(-30,2); it.s=rrange(0.7,1.7); it.ry=rrange(0,6.28); }),
+      { speedMul:1.0, minX:-32, maxX:32, sway:0.2, snapY:oceanAdd }); });
+
+  // ---- FISH schools: real low-poly fish (Quaternius/Kenney CC0), staggered depth + height (far ones smaller) ----
+  const fishKeys3D=['ocFishClown','ocFishTang','ocFishBfly','ocFishMand','ocFishK'];
+  (lowfx?fishKeys3D.slice(0,3):fishKeys3D).forEach((k)=>{
+    modelBand(k, 1.0, spread(lowfx?6:12,-32,32,(it)=>{ it.z=rrange(-30,4); it.y=rrange(-7,10); it.s=rrange(0.6,1.2)*(1+(it.z+30)/60); it.ry=OC_FISH_HDG; it.rz=rrange(-0.1,0.1); }),
+      { speedMul:rrange(0.5,0.85), minX:-36, maxX:36, swim:0.5, bob:0.3 }); });
+  // a couple of Kenney sprite fish as cheap extra shoaling layers
+  ['ocFishA','ocFishC'].forEach((key)=>{ const tex=assets.tex[key]; if(!tex) return;
     const aspect=tex.image?tex.image.width/tex.image.height:1.3;
     const m=new THREE.MeshBasicNodeMaterial({ map:tex, transparent:true, alphaTest:0.5, side:THREE.DoubleSide, depthWrite:true });
     bands.push(new Band(new THREE.PlaneGeometry(aspect,1), m,
-      spread(lowfx?5:9,-32,32,(it)=>{ it.y=rrange(-7,9); it.z=rrange(-12,1); it.s=rrange(0.7,1.6); }),
+      spread(lowfx?4:7,-32,32,(it)=>{ it.y=rrange(-6,10); it.z=rrange(-20,1); it.s=rrange(0.7,1.4); }),
       { speedMul:rrange(0.6,0.9), minX:-36, maxX:36, swim:0.4, bob:0.25 })); });
 
-  // ---- HERO manta ray gliding across the deep (flapping wings; HQ only) ----
-  if(!lowfx){ const manta=gManta(); manta.position.set(20,4,-30); manta.scale.setScalar(2.2); themeRoot.add(manta);
-    const w=manta.userData.wings;
-    animators.push((dt,t)=>{ manta.position.x-=dt*1.6; if(manta.position.x<-34) manta.position.x=34;
-      manta.position.y=4+Math.sin(t*0.4)*1.2; manta.rotation.y=Math.sin(t*0.4)*0.12;
-      const fl=Math.sin(t*1.4)*0.5; w[0].rotation.z=-Math.PI/2-fl; w[1].rotation.z=Math.PI/2+fl; }); }
+  // ---- HERO creatures gliding through the deep: manta (always) + sea turtle & shark (HQ) ----
+  const glide=(wrap,o)=>{ if(!wrap) return;
+    wrap.position.set(o.x0!=null?o.x0:rrange(-18,32), o.baseY, o.baseZ);
+    const roll=o.roll!=null?o.roll:0.1, pitch=o.pitch!=null?o.pitch:0.12, p0=o.pitch0||0, b0=o.bank0||0,
+          bobA=o.bobA!=null?o.bobA:1.2, bobF=o.bobF!=null?o.bobF:0.4, wrapX=o.wrapX||42;
+    animators.push((dt,t)=>{ wrap.position.x-=dt*o.spd; if(wrap.position.x<-wrapX) wrap.position.x=wrapX;
+      wrap.position.y=o.baseY+Math.sin(t*bobF)*bobA;
+      wrap.rotation.set(p0+Math.sin(t*bobF*0.8)*pitch, o.hdg, b0+Math.sin(t*bobF)*roll); }); };
+  // manta lies flat (hdg 0); a steady forward pitch banks its wingspan toward the low camera so it reads
+  glide(spawnCreature('ocMantaM', 6.8), { baseY:6, baseZ:-23, spd:1.7, hdg:OC_MANTA_HDG, pitch0:-0.9, roll:0.06, pitch:0.1 });
+  if(!lowfx){
+    glide(spawnCreature('ocTurtle', 3.4), { baseY:-0.5, baseZ:-15, spd:1.1, hdg:OC_TURTLE_HDG, bobA:0.8, bobF:0.5 });
+    glide(spawnCreature('ocShark', 5.2), { baseY:7.5, baseZ:-31, spd:2.3, hdg:OC_SHARK_HDG, roll:0.05, bobA:0.7 });
+  }
 
   // ---- bioluminescent jellyfish drifting in the mid/back trench (bloom-lit) ----
   const jcol=[0x6fd0ff,0xb86bff,0xff79c6,0x57ffd1];
@@ -1798,7 +1834,7 @@ function applyTheme(name){
   // per-theme cinematic grade (hills = warm golden hour; others near-neutral)
   // punchier + less golden: lower warm tint, push saturation/vibrance up per theme
   const G = ({ hills:{warm:0.05,sat:1.28,vig:0.36,lift:0.012}, space:{warm:0.02,sat:1.24,vig:0.38,lift:0.02},
-               ocean:{warm:0.03,sat:1.24,vig:0.38,lift:0.01}, ruins:{warm:0.07,sat:1.22,vig:0.34,lift:0.015} })[name] || {warm:0.05,sat:1.22,vig:0.34,lift:0.01};
+               ocean:{warm:0.03,sat:1.26,vig:0.36,lift:0.02}, ruins:{warm:0.07,sat:1.22,vig:0.34,lift:0.015} })[name] || {warm:0.05,sat:1.22,vig:0.34,lift:0.01};
   gradeU.warm.value=G.warm; gradeU.sat.value=G.sat; gradeU.vignette.value=G.vig; gradeU.lift.value=G.lift;
   // feed the sun direction to foliage rim lighting (dialed back so the gold rim doesn't dominate)
   rimU.sunDir.value.copy(skyU.sunDir.value); rimU.col.value.setHex(L.sun); rimU.amt.value = (name==='hills'?0.4:0.0);
