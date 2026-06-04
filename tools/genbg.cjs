@@ -229,39 +229,58 @@ fs.mkdirSync(OUT, { recursive: true });
       finish('space_planets',c,ctx,3,true);
     })();
 
-    // ===== OCEAN: TRENCH (deep-water vertical gradient + light columns + marine snow, tileable) =====
+    // ===== OCEAN: TRENCH (deep-water gradient + soft god-ray columns + biolume glow + marine snow) =====
     (function(){ const W=1280,H=448,c=mk(W,H),ctx=c.getContext('2d'); const rand=rng(201);
-      ctx.fillStyle=vgrad(ctx,0,0,H,[[0,'#0a4a66'],[0.5,'#063047'],[1,'#02101c']]); ctx.fillRect(0,0,W,H);
-      for(let i=0;i<7;i++){ const x=rand()*W, w=40+rand()*90; const g=ctx.createLinearGradient(x,0,x+w*0.4,H);
-        g.addColorStop(0,'rgba(150,225,255,0.10)'); g.addColorStop(0.6,'rgba(120,200,235,0.03)'); g.addColorStop(1,'rgba(120,200,235,0)');
-        ctx.fillStyle=g; ctx.beginPath(); ctx.moveTo(x,0); ctx.lineTo(x+w,0); ctx.lineTo(x+w*1.5,H); ctx.lineTo(x+w*0.5,H); ctx.closePath(); ctx.fill(); }
-      ctx.fillStyle='#bfeeff'; for(let i=0;i<260;i++){ const x=rand()*W,y=rand()*H,s=rand()*1.5+0.3; ctx.globalAlpha=0.05+rand()*0.25; ctx.fillRect(x,y,s,s);} ctx.globalAlpha=1;
+      ctx.fillStyle=vgrad(ctx,0,0,H,[[0,'#0e5a78'],[0.45,'#073650'],[1,'#02101c']]); ctx.fillRect(0,0,W,H);
+      // soft overlapping light columns descending from the surface
+      for(let i=0;i<13;i++){ const x=rand()*W, w=50+rand()*120; const g=ctx.createLinearGradient(x,0,x+w*0.4,H);
+        g.addColorStop(0,'rgba(160,230,255,'+(0.05+rand()*0.07)+')'); g.addColorStop(0.55,'rgba(120,200,235,0.025)'); g.addColorStop(1,'rgba(120,200,235,0)');
+        ctx.fillStyle=g; ctx.beginPath(); ctx.moveTo(x,0); ctx.lineTo(x+w,0); ctx.lineTo(x+w*1.6,H); ctx.lineTo(x+w*0.4,H); ctx.closePath(); ctx.fill(); }
+      // faint biolume glow blobs in the deep
+      for(let i=0;i<9;i++){ const x=rand()*W,y=H*0.3+rand()*H*0.6,r=24+rand()*70; const col=['120,210,255','120,255,210','170,130,235'][(rand()*3)|0];
+        const g=ctx.createRadialGradient(x,y,0,x,y,r); g.addColorStop(0,'rgba('+col+','+(0.05+rand()*0.06)+')'); g.addColorStop(1,'rgba('+col+',0)'); ctx.fillStyle=g; ctx.beginPath(); ctx.arc(x,y,r,0,6.28); ctx.fill(); }
+      // marine snow, denser/brighter toward the lit top
+      for(let i=0;i<340;i++){ const x=rand()*W,y=rand()*H,s=rand()*1.6+0.3; ctx.fillStyle='#cdf2ff'; ctx.globalAlpha=(0.04+rand()*0.22)*(1-y/H*0.5); ctx.fillRect(x,y,s,s);} ctx.globalAlpha=1;
       finish('ocean_trench',c,ctx,3,true);
     })();
 
-    // ===== OCEAN: KELP FOREST (tall swaying strand silhouettes, tileable) =====
+    // ===== OCEAN: KELP FOREST (layered swaying strands + bladed fronds, tileable) =====
     (function(){ const W=2048,H=512,c=mk(W,H),ctx=c.getContext('2d'); const rand=rng(212);
       const baseY=H*1.02;
-      ctx.fillStyle=vgrad(ctx,0,H*0.5,H,[[0,'rgba(6,40,52,0)'],[1,'rgba(4,30,42,0.9)']]); ctx.fillRect(0,H*0.5,W,H*0.5);
-      const N=70;
-      for(let i=0;i<N;i++){ const x=(i/N)*W + (rand()-0.5)*20; const th=160+rand()*260; const w=8+rand()*14;
-        const sway=(rand()-0.5)*120, topY=baseY-th;
-        const g=vgrad(ctx,0,topY,baseY,[[0,'#16614f'],[1,'#073026']]); ctx.strokeStyle=g; ctx.lineWidth=w; ctx.lineCap='round';
-        ctx.beginPath(); ctx.moveTo(x,baseY); ctx.bezierCurveTo(x+sway*0.3, baseY-th*0.4, x+sway*0.7, baseY-th*0.75, x+sway, topY); ctx.stroke();
-        ctx.globalAlpha=0.5; ctx.fillStyle='#1c6f54'; for(let k=0;k<3;k++){ const ty=topY+th*(0.3+k*0.22); ctx.beginPath(); ctx.ellipse(x+sway*(0.4+k*0.2), ty, w*1.6, w*0.5, 0.5, 0,6.28); ctx.fill(); } ctx.globalAlpha=1;
-      }
+      ctx.fillStyle=vgrad(ctx,0,H*0.42,H,[[0,'rgba(6,42,54,0)'],[1,'rgba(4,30,42,0.92)']]); ctx.fillRect(0,H*0.42,W,H*0.58);
+      // two passes: a darker, shorter BACK layer then a brighter FRONT layer (parallax depth within the silhouette)
+      [{N:60,thA:120,thB:200,wA:7,wB:11,c0:'#0f4a3c',c1:'#062018',al:0.85},
+       {N:80,thA:170,thB:300,wA:9,wB:16,c0:'#1a6e58',c1:'#08352a',al:1}].forEach(P=>{
+        for(let i=0;i<P.N;i++){ const x=(i/P.N)*W+(rand()-0.5)*26; const th=P.thA+rand()*(P.thB-P.thA); const w=P.wA+rand()*(P.wB-P.wA);
+          const sway=(rand()-0.5)*140, topY=baseY-th;
+          ctx.globalAlpha=P.al; const g=vgrad(ctx,0,topY,baseY,[[0,P.c0],[1,P.c1]]); ctx.strokeStyle=g; ctx.lineWidth=w; ctx.lineCap='round';
+          ctx.beginPath(); ctx.moveTo(x,baseY); ctx.bezierCurveTo(x+sway*0.3,baseY-th*0.4, x+sway*0.7,baseY-th*0.75, x+sway,topY); ctx.stroke();
+          // bladed leaves along the stalk
+          ctx.fillStyle=P.c0; for(let k=0;k<5;k++){ const f=0.2+k*0.17; const lx=x+sway*f, ly=baseY-th*f; const dir=k%2?1:-1;
+            ctx.save(); ctx.translate(lx,ly); ctx.rotate(dir*0.7+sway*0.002); ctx.globalAlpha=P.al*0.6; ctx.beginPath(); ctx.ellipse(dir*w*1.3,0,w*2.2,w*0.55,0,0,6.28); ctx.fill(); ctx.restore(); }
+          ctx.globalAlpha=1;
+        }
+      });
       finish('ocean_kelp',c,ctx,4,true);
     })();
 
-    // ===== OCEAN: REEF (near seabed ridge with coral/sea-fan speckle, tileable) =====
+    // ===== OCEAN: REEF (near seabed ridge studded with real coral silhouettes, tileable) =====
     (function(){ const W=2048,H=420,c=mk(W,H),ctx=c.getContext('2d'); const rand=rng(223);
-      const harm=harmonics(rand,5), base=H*1.04, amp=H*0.5;
+      const harm=harmonics(rand,5), base=H*1.06, amp=H*0.5;
       ctx.save(); ridgePath(ctx,W,H,base,amp,harm);
-      ctx.fillStyle=vgrad(ctx,0,base-amp,base,[[0,'#0e5566'],[1,'#04222e']]); ctx.fill(); ctx.clip();
-      for(let k=0;k<340;k++){ const x=rand()*W; const u=x/W*Math.PI*2; const y=base-heightAt(u,harm)*amp + rand()*36;
-        const col=['#1f8f86','#2f9f6a','#c85a7a','#d98a3a','#9a6ad0'][(rand()*5)|0]; ctx.globalAlpha=0.16; ctx.fillStyle=col;
-        ctx.beginPath(); ctx.arc(x,y,2+rand()*5,0,6.28); ctx.fill(); } ctx.globalAlpha=1;
-      ctx.restore();
+      ctx.fillStyle=vgrad(ctx,0,base-amp,base,[[0,'#125a6a'],[1,'#04222e']]); ctx.fill(); ctx.clip();
+      const cols=['#27a89a','#37b074','#e06a86','#ec9a44','#a878e0','#46c0d0'];
+      function coral(x,y,r,col){ ctx.fillStyle=col; ctx.strokeStyle=col; const t=(rand()*3)|0;
+        if(t===0){ ctx.lineCap='round'; const nb=4+(rand()*3|0); for(let b=0;b<nb;b++){ const a=-Math.PI/2+(rand()-0.5)*1.7, len=r*(0.8+rand()); ctx.lineWidth=Math.max(1.5,r*0.22);
+            ctx.beginPath(); ctx.moveTo(x,y); ctx.quadraticCurveTo(x+Math.cos(a)*len*0.6,y+Math.sin(a)*len*0.6, x+Math.cos(a)*len,y+Math.sin(a)*len); ctx.stroke(); } }
+        else if(t===1){ ctx.beginPath(); ctx.ellipse(x,y,r,r*0.72,0,Math.PI,2*Math.PI); ctx.fill(); for(let g=0;g<4;g++){ ctx.globalAlpha*=0.9; ctx.beginPath(); ctx.ellipse(x+(rand()-0.5)*r,y-rand()*r*0.4,r*0.3,r*0.5,0,Math.PI,2*Math.PI); ctx.fill(); } }
+        else { ctx.lineWidth=Math.max(1,r*0.1); for(let b=0;b<7;b++){ const a=-Math.PI/2+(b/6-0.5)*1.5; ctx.beginPath(); ctx.moveTo(x,y); ctx.lineTo(x+Math.cos(a)*r*1.4,y+Math.sin(a)*r*1.4); ctx.stroke(); } } }
+      // far (small, dim) then near (larger, brighter) coral passes for depth
+      for(const P of [{n:150,rA:4,rB:10,al:0.4},{n:120,rA:9,rB:22,al:0.72}]){
+        for(let k=0;k<P.n;k++){ const x=rand()*W; const u=x/W*Math.PI*2; const y=base-heightAt(u,harm)*amp+rand()*40;
+          ctx.globalAlpha=P.al; coral(x,y,P.rA+rand()*(P.rB-P.rA),cols[(rand()*cols.length)|0]); }
+      }
+      ctx.globalAlpha=1; ctx.restore();
       finish('ocean_reef',c,ctx,5,true);
     })();
 
