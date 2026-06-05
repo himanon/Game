@@ -3,9 +3,9 @@
     "relation": ["delegate_permission/common.handle_all_urls"],
     "target": {
       "namespace": "android_app",
-      "package_name": "com.himanshu.flappy3d",
+      "package_name": "io.github.himanon.twa",
       "sha256_cert_fingerprints": [
-        "REPLACE_WITH_KEYSTORE_SHA256_FROM_bubblewrap_build"
+        "67:F0:B3:46:4C:ED:62:BC:A9:75:29:8B:B2:34:F7:E0:7C:3B:22:38:58:3C:EF:A0:E7:71:28:15:27:60:22:61"
       ]
     }
   }
