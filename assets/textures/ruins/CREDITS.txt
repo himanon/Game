@@ -1,0 +1,7 @@
+ambientCG CC0 texture sets used for Ruins:
+- Rock035_1K-JPG -> ruin_stone_*.jpg
+- Moss001_1K-JPG -> ruin_moss_*.jpg
+- Ground037_1K-JPG -> ruin_floor_*.jpg
+
+License: CC0 1.0 Public Domain
+Source: https://ambientcg.com/

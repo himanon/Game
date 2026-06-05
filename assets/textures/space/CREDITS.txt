@@ -1,0 +1,3 @@
+TEXTURE CREDITS
+- Mars ground (mars_color/mars_normal): ambientCG "Ground025" - CC0 1.0 (public domain), ambientcg.com. Used for surface grain/relief; ruddy regolith tone applied in-engine (see buildMarsTerrain). Fetch via tools/fetchmars.cjs.
+- Planet maps (earth/jupiter/saturn/saturn ring/moon/neptune): planetpixelemporium.com (James Hastings-Trew), free to use; via jeromeetienne/threex.planets.

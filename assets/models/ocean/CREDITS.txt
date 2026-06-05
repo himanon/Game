@@ -1,0 +1,9 @@
+Pirate Kit by Kenney (www.kenney.nl)
+License: CC0 1.0 Universal (Public Domain) - https://creativecommons.org/publicdomain/zero/1.0/
+Free for personal, educational and commercial use. Crediting Kenney is appreciated (not required).
+Curated subset: pillar caps (chest, barrel, bottle-large, rocks-c) + seabed scenery (ship-wreck landmark,
+ship-pirate-large, rocks-a/b, rocks-sand-a/b, crate, crate-bottles, cannon, cannon-ball, mast). GLB variants
+share Textures/colormap.png. Fetch via tools/fetchpackD.cjs.
+
+Fish Pack by Kenney (CC0) — 2D fish sprites used for swimming schools — lives in
+../../textures/ocean/fish/ (see that folder's KENNEY-LICENSE.txt).

@@ -1,0 +1,4 @@
+Stylized Nature MegaKit (FREE/Standard) by Quaternius
+License: CC0 1.0 Universal (Public Domain) - https://creativecommons.org/publicdomain/zero/1.0/
+Source: https://quaternius.com  |  Support: https://www.patreon.com/quaternius
+Curated subset; textures downscaled for web. Only the glTF variants are used.
